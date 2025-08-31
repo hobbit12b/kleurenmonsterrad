@@ -1,172 +1,334 @@
-Met deze code werkte de spinner en zag ik nog een kleurenmonster.
-Nu i
-
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="nl">
 <head>
   <meta charset="UTF-8" />
   <title>Kleurenmonster Spinner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    :root { --bg:#f6f7fb; --fg:#222; --panel:#fff; }
+    * { box-sizing: border-box; }
     body {
-      display: flex;
-      flex-direction: row;
+      display: grid;
+      grid-template-columns: 460px 520px;
+      gap: 24px;
       justify-content: center;
-      align-items: flex-start;
-      gap: 30px;
+      align-items: start;
       padding: 20px;
-      font-family: Arial, sans-serif;
-      background: #f6f7fb;
+      font-family: system-ui, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
     }
-    .kolom {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+    .kolom { display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 20px; margin: 10px 0; }
-    canvas { background: #fff; border: 4px solid #222; border-radius: 12px; }
+    canvas { background: var(--panel); border: 4px solid var(--fg); border-radius: 12px; }
     #rad { border-radius: 50%; }
     button {
-      margin-top: 12px;
-      padding: 10px 20px;
-      font-size: 16px;
-      border: none;
-      border-radius: 10px;
-      background: #222;
-      color: white;
-      cursor: pointer;
+      margin-top: 12px; padding: 10px 20px; font-size: 16px;
+      border: 0; border-radius: 12px; background: var(--fg); color: #fff; cursor: pointer;
     }
-    #resultaat { margin-top: 10px; font-size: 18px; font-weight: bold; }
+    button[disabled] { opacity: .6; cursor: not-allowed; }
+    #resultaat { margin-top: 10px; font-size: 18px; font-weight: 700; min-height: 1.5em; }
+    /* klein randje rond het monsterpaneel voor een kaartgevoel */
+    #monster { box-shadow: inset 0 0 0 3px rgba(0,0,0,.08); }
+    /* toegankelijk feedbackvak */
+    #live { position: absolute; left: -9999px; }
   </style>
 </head>
 <body>
   <div class="kolom">
     <h1>Spinner</h1>
-    <canvas id="rad" width="400" height="400"></canvas>
-    <button id="draaiBtn">Draai!</button>
+    <canvas id="rad" width="400" height="400" aria-label="kleurenspin"></canvas>
+    <button id="draaiBtn" aria-describedby="resultaat">Draai</button>
     <div id="resultaat"></div>
+    <div id="live" role="status" aria-live="polite"></div>
   </div>
 
   <div class="kolom">
     <h1>Kleurenmonster</h1>
-    <canvas id="monster" width="400" height="600"></canvas>
+    <canvas id="monster" width="400" height="600" aria-label="kleurenmonster"></canvas>
   </div>
 
   <script>
-    // Kleurenlijst
+    // Keuzes
     const opties = [
-      "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw",
-      "Roze","Paars","Rood","Lichtgroen","Donkergroen",
-      "Geel","Oranje","Zwart"
+      "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw","Roze","Paars",
+      "Rood","Lichtgroen","Donkergroen","Geel","Oranje"
     ];
 
-    // Kleurwaarden
     const kleurMap = {
-      "Wit":"#ffffff","Grijs":"#bdbdbd","Zwart":"#000000",
-      "Lichtblauw":"#87cefa","Donkerblauw":"#1e3a8a","Roze":"#ff9acb",
-      "Paars":"#8b5cf6","Rood":"#ef4444","Lichtgroen":"#86efac",
-      "Donkergroen":"#166534","Geel":"#fde047","Oranje":"#fb923c"
+      "Wit":"#ffffff",
+      "Grijs":"#bdbdbd",
+      "Zwart":"#000000",
+      "Lichtblauw":"#87cefa",
+      "Donkerblauw":"#1e3a8a",
+      "Roze":"#ff9acb",
+      "Paars":"#8b5cf6",
+      "Rood":"#ef4444",
+      "Lichtgroen":"#86efac",
+      "Donkergroen":"#166534",
+      "Geel":"#fde047",
+      "Oranje":"#fb923c"
     };
 
     // Spinner
     const rad = document.getElementById("rad");
     const rctx = rad.getContext("2d");
     const R = rad.width / 2;
-    let hoek = 0, bezig = false, gekozenKleur = "Wit";
+    let hoek = 0;                 // huidige rotatie in graden
+    let bezig = false;
+    let gekozen = "Wit";
 
-    function tekenRad() {
+    // Monster
+    const mCanvas = document.getElementById("monster");
+    const m = mCanvas.getContext("2d");
+    let monsterKleur = kleurMap[gekozen];
+
+    function tekenSchijven() {
       const stap = 2 * Math.PI / opties.length;
       for (let i = 0; i < opties.length; i++) {
+        const naam = opties[i];
         rctx.beginPath();
         rctx.moveTo(R, R);
-        rctx.arc(R, R, R-4, i*stap, (i+1)*stap);
-        rctx.fillStyle = kleurMap[opties[i]] || "#000";
+        rctx.arc(R, R, R - 4, i * stap, (i + 1) * stap);
+        rctx.closePath();
+        rctx.fillStyle = kleurMap[naam] || "#000";
         rctx.fill();
+        rctx.strokeStyle = "#222";
         rctx.stroke();
-        // Tekst
+
+        // tekstkleur voor donkere vlakken
+        let tekstkleur = "#000";
+        if (naam === "Zwart" || naam === "Donkerblauw" || naam === "Donkergroen") tekstkleur = "#fff";
+
         rctx.save();
-        rctx.translate(R,R);
-        rctx.rotate(i*stap+stap/2);
-        rctx.textAlign="right";
-        rctx.fillStyle="#000";
-        rctx.font="16px Arial";
-        rctx.fillText(opties[i], R-10, 5);
+        rctx.translate(R, R);
+        rctx.rotate(i * stap + stap / 2);
+        rctx.textAlign = "right";
+        rctx.fillStyle = tekstkleur;
+        rctx.font = "16px system-ui, Arial";
+        rctx.fillText(naam, R - 12, 6);
         rctx.restore();
       }
-      // Pijl
+    }
+
+    function tekenPijl() {
+      const tipX = rad.width - 8;
+      const tipY = R;
+      const baseX = rad.width - 42;
+      const halfH = 18;
+
       rctx.beginPath();
-      rctx.moveTo(R-20,10);
-      rctx.lineTo(R+20,10);
-      rctx.lineTo(R,40);
+      rctx.moveTo(tipX, tipY);
+      rctx.lineTo(baseX, tipY - halfH);
+      rctx.lineTo(baseX, tipY + halfH);
       rctx.closePath();
-      rctx.fillStyle="#222";
+      rctx.fillStyle = "#222";
       rctx.fill();
+      // klein cirkeltje in het midden als as
+      rctx.beginPath();
+      rctx.arc(R, R, 6, 0, Math.PI * 2);
+      rctx.fill();
+    }
+
+    function renderRad() {
+      rctx.clearRect(0, 0, rad.width, rad.height);
+      rctx.save();
+      rctx.translate(R, R);
+      rctx.rotate(hoek * Math.PI / 180);
+      rctx.translate(-R, -R);
+      tekenSchijven();
+      rctx.restore();
+      tekenPijl();
+    }
+
+    function indexOnderPijl() {
+      const n = opties.length;
+      const stap = 360 / n;
+      // originele hoek die onder de pijl ligt
+      let a = (-hoek) % 360;
+      if (a < 0) a += 360;
+      const idx = Math.floor(a / stap) % n;
+      return idx;
     }
 
     function draai() {
       if (bezig) return;
       bezig = true;
-      const doel = Math.random()*360 + 1080; // min 3 rondjes
-      const duur = 3000;
-      let start = null;
+      document.getElementById("draaiBtn").disabled = true;
 
-      function anim(t) {
-        if (!start) start = t;
-        const p = Math.min((t-start)/duur,1);
-        const ease = 1 - Math.pow(1-p,3);
-        hoek = doel*ease;
+      // start met een flinke slinger
+      let snelheid = 20 + Math.random() * 15; // graden per frame
+      // extra omwentelingen voor spanning
+      hoek += 360 * 4;
 
-        rctx.clearRect(0,0,rad.width,rad.height);
-        rctx.save();
-        rctx.translate(R,R);
-        rctx.rotate(hoek*Math.PI/180);
-        rctx.translate(-R,-R);
-        tekenRad();
-        rctx.restore();
+      function anim() {
+        snelheid *= 0.985;         // wrijving
+        hoek += snelheid;
 
-        if (p<1) requestAnimationFrame(anim);
-        else {
-          bezig=false;
-          const idx=bepaalIndex(hoek);
-          gekozenKleur=opties[idx];
-          document.getElementById("resultaat").innerText="Het monster wordt: "+gekozenKleur;
-          kleurMonster();
+        renderRad();
+
+        if (snelheid > 0.25) {
+          requestAnimationFrame(anim);
+        } else {
+          // afronden op een klein tikje voor consistentie
+          hoek = hoek % 360;
+          renderRad();
+
+          const idx = indexOnderPijl();
+          gekozen = opties[idx];
+          monsterKleur = kleurMap[gekozen];
+          toonResultaat(gekozen);
+          tekenMonster();
+          bezig = false;
+          document.getElementById("draaiBtn").disabled = false;
         }
       }
       requestAnimationFrame(anim);
     }
 
-    function bepaalIndex(hoekGraden) {
-      const norm = ((hoekGraden%360)+360)%360;
-      const stap=360/optes.length;
-      return Math.floor((optes.length-(norm/stap))%optes.length);
+    function toonResultaat(tekst) {
+      const uit = document.getElementById("resultaat");
+      const live = document.getElementById("live");
+      uit.textContent = `Gekozen kleur: ${tekst}`;
+      live.textContent = `Kleur ${tekst}`;
     }
 
-    // Monster
-    const monster=document.getElementById("monster");
-    const mctx=monster.getContext("2d");
-    const img=new Image();
-    img.src="kleurenmonster-transparant.png"; // zelfde map
-    img.onload=()=> kleurMonster();
+    // Kleurenmonster: simpele vectorvorm die we kunnen vullen
+    function tekenMonster() {
+      m.clearRect(0, 0, mCanvas.width, mCanvas.height);
 
-    function kleurMonster() {
-      mctx.clearRect(0,0,monster.width,monster.height);
-      const kleur=kleurMap[gekozenKleur]||"#000";
-      // achtergrondkleur als vulling voor het monster
-      mctx.fillStyle=kleur;
-      mctx.fillRect(0,0,monster.width,monster.height);
+      // achtergrondkaart
+      m.save();
+      m.lineWidth = 6;
+      m.strokeStyle = "#222";
+      m.fillStyle = "#fff";
+      m.beginPath();
+      const pad = 20;
+      rondeRechthoek(m, pad, pad, mCanvas.width - pad * 2, mCanvas.height - pad * 2, 18);
+      m.fill();
+      m.stroke();
+      m.restore();
 
-      // masker toepassen met transparant plaatje
-      mctx.globalCompositeOperation="destination-in";
-      mctx.drawImage(img,0,0,monster.width,monster.height);
-      mctx.globalCompositeOperation="source-over";
+      // lichaam
+      const x = 70, y = 120, w = 260, h = 300;
 
-      // lijntekening eroverheen
-      mctx.drawImage(img,0,0,monster.width,monster.height);
+      // masker voor lijf
+      m.save();
+      m.beginPath();
+      // bovenkant licht afgerond
+      m.moveTo(x + 20, y);
+      m.lineTo(x + w - 20, y);
+      m.quadraticCurveTo(x + w, y + 10, x + w, y + 30);
+      m.lineTo(x + w, y + h - 50);
+
+      // onderkant met kartels
+      const kartels = 12;
+      const dx = w / kartels;
+      let kY = y + h - 30;
+      for (let i = 0; i < kartels; i++) {
+        const px = x + w - i * dx;
+        const py = i % 2 === 0 ? kY + 25 : kY - 10;
+        m.lineTo(px, py);
+      }
+      m.lineTo(x, y + h - 50);
+      m.lineTo(x, y + 30);
+      m.quadraticCurveTo(x, y + 10, x + 20, y);
+      m.closePath();
+
+      // vul met gekozen kleur, met subtiele schaduw
+      m.fillStyle = monsterKleur;
+      m.fill();
+
+      // lichte glans
+      const grad = m.createLinearGradient(x, y, x, y + h);
+      grad.addColorStop(0, "rgba(255,255,255,.25)");
+      grad.addColorStop(0.5, "rgba(255,255,255,0)");
+      m.fillStyle = grad;
+      m.globalCompositeOperation = "soft-light";
+      m.fill();
+      m.globalCompositeOperation = "source-over";
+
+      // omtrek
+      m.lineWidth = 5;
+      m.strokeStyle = "#222";
+      m.stroke();
+      m.restore();
+
+      // armen
+      m.lineWidth = 6;
+      m.strokeStyle = "#444";
+      m.beginPath();
+      m.moveTo(x - 5, y + 230);
+      m.quadraticCurveTo(x - 40, y + 200, x - 10, y + 160);
+      m.moveTo(x + w + 5, y + 230);
+      m.quadraticCurveTo(x + w + 40, y + 200, x + w - 10, y + 160);
+      m.stroke();
+
+      // benen en voeten
+      m.beginPath();
+      m.moveTo(x + 70, y + h + 20);
+      m.lineTo(x + 70, y + h - 10);
+      m.moveTo(x + w - 70, y + h + 20);
+      m.lineTo(x + w - 70, y + h - 10);
+      m.stroke();
+
+      // ogen
+      tekenOog(x + 120, y + 90, 28);
+      tekenOog(x + 180, y + 90, 28);
+
+      // wenkbrauwen
+      m.lineWidth = 10;
+      m.beginPath();
+      m.moveTo(x + 90, y + 60);
+      m.quadraticCurveTo(x + 140, y + 40, x + 190, y + 60);
+      m.stroke();
+
+      // mond
+      m.lineWidth = 6;
+      m.beginPath();
+      m.moveTo(x + 120, y + 200);
+      m.quadraticCurveTo(x + 150, y + 220, x + 190, y + 200);
+      m.stroke();
     }
 
-    document.getElementById("draaiBtn").addEventListener("click",draai);
-    tekenRad();
+    function tekenOog(cx, cy, r) {
+      m.save();
+      m.fillStyle = "#fff";
+      m.strokeStyle = "#222";
+      m.lineWidth = 5;
+      m.beginPath();
+      m.arc(cx, cy, r, 0, Math.PI * 2);
+      m.fill();
+      m.stroke();
+
+      // pupil
+      m.fillStyle = "#222";
+      m.beginPath();
+      m.arc(cx + r * 0.25, cy + r * 0.1, r * 0.35, 0, Math.PI * 2);
+      m.fill();
+      m.restore();
+    }
+
+    function rondeRechthoek(ctx, x, y, w, h, r) {
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+    }
+
+    // init
+    renderRad();
+    tekenMonster();
+    document.getElementById("draaiBtn").addEventListener("click", draai);
+    // toetsenbord, Enter of spatie
+    document.addEventListener("keydown", e => {
+      if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
+    });
   </script>
 </body>
 </html>
