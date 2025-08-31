@@ -46,7 +46,7 @@
   </div>
 
   <script>
-  // Helper om veilig te checken of een blendmodus wordt ondersteund
+  // Licht staat vast in het scherm, het rad draait via een hoekoffset
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -55,7 +55,6 @@
     return ok;
   }
 
-  // --- Config ---
   const opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
@@ -67,31 +66,28 @@
     "turquoise":"#40E0D0"
   };
   const metallicKleuren = new Set(["goud","zilver"]);
+  const donkereSegmenten = new Set([]); // zwarte segmenttekst
+  const lijnenWitKleuren = new Set([]); // bij dit palet nooit
+  const pupilKleuren = new Set([]);     // bij dit palet nooit
 
-  // Segmenttekst overal zwart
-  const donkereSegmenten = new Set([]);
-  // Deze set blijft leeg voor dit palet
-  const lijnenWitKleuren = new Set([]);
-  const pupilKleuren = new Set([]);
-
-  // --- Spinner ---
+  // Spinner
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190; // rad links, rechts ruimte voor pijl
+  const CX = 220, CY = 200, R = 190; // rad links in canvas, rechts ruimte voor pijl
   let hoek = 0, bezig = false, gekozen = opties[0];
 
-  function tekenMetallicInSegment(naam, startA, endA) {
+  function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
 
     rctx.save();
-    // clip tot het segment
+    // clip tot huidige segmentvorm
     rctx.beginPath();
     rctx.moveTo(CX, CY);
-    rctx.arc(CX, CY, R, startA, endA);
+    rctx.arc(CX, CY, R, a0, a1);
     rctx.closePath();
     rctx.clip();
 
-    // 1 diepte overlay
+    // diepteoverlay, licht van boven naar beneden in schermcoördinaten
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -110,21 +106,20 @@
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalCompositeOperation = "source-over";
     } else {
-      // fallback, multiply plus lichter
       rctx.globalCompositeOperation = "multiply";
       rctx.fillStyle = overlayGrad;
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalCompositeOperation = "lighter";
-      rctx.fillStyle = "rgba(255,255,255,0.15)";
+      rctx.fillStyle = "rgba(255,255,255,0.18)";
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalCompositeOperation = "source-over";
     }
     rctx.restore();
 
-    // 2 diagonale glansstrepen
+    // diagonale glansstrepen, getekend in schermcoördinaten
     rctx.save();
     rctx.translate(CX, CY);
-    rctx.rotate(-Math.PI / 10);
+    rctx.rotate(-Math.PI / 10);  // vaste lichtval
     rctx.translate(-CX, -CY);
     rctx.globalAlpha = 0.55;
     for (let i = 0; i < 3; i++) {
@@ -138,7 +133,7 @@
     rctx.restore();
     rctx.globalAlpha = 1;
 
-    // 3 highlights in screen
+    // highlights in screen
     const rg = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
     rg.addColorStop(0.00, "rgba(255,255,255,1.00)");
     rg.addColorStop(0.35, "rgba(255,255,255,0.60)");
@@ -169,12 +164,14 @@
 
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
+    const rot = hoek * Math.PI / 180;     // hoekoffset, rad draait, licht blijft vast
+
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
-      const a0 = i * stap;
-      const a1 = (i + 1) * stap;
+      const a0 = i * stap + rot;
+      const a1 = (i + 1) * stap + rot;
 
-      // basisvulling
+      // basisvulling van het segment
       rctx.beginPath();
       rctx.moveTo(CX, CY);
       rctx.arc(CX, CY, R, a0, a1);
@@ -182,25 +179,26 @@
       rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
-      // metallic gloed indien goud of zilver
+      // metallic gloed indien goud of zilver, in schermcoördinaten
       tekenMetallicInSegment(naam, a0, a1);
 
-      // segmentlijnen
+      // segmentlijn
       rctx.strokeStyle = "#222";
       rctx.lineWidth = 2;
       rctx.stroke();
 
-      // label
+      // label roteert mee met het segment
       const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
       rctx.translate(CX, CY);
-      rctx.rotate(i * stap + stap / 2);
+      rctx.rotate(i * stap + stap / 2 + rot);
       rctx.textAlign = "right";
       rctx.fillStyle = tekstkleur;
       rctx.font = "16px system-ui, Arial";
       rctx.fillText(naam, R - 12, 6);
       rctx.restore();
     }
+
     // buitenrand
     rctx.lineWidth = 6;
     rctx.strokeStyle = "#333";
@@ -209,7 +207,7 @@
     rctx.stroke();
   }
 
-  // Pijl buiten het rad, rechts, wijst naar links
+  // Pijl rechts, wijst naar links
   function tekenPijl() {
     const offset = 22;
     const tipX = CX + R + offset;
@@ -232,12 +230,8 @@
 
   function renderRad() {
     rctx.clearRect(0, 0, rad.width, rad.height);
-    rctx.save();
-    rctx.translate(CX, CY);
-    rctx.rotate(hoek * Math.PI / 180);
-    rctx.translate(-CX, -CY);
+    // geen canvasrotatie meer, alles via hoekoffset in tekenSchijven
     tekenSchijven();
-    rctx.restore();
     tekenPijl();
   }
 
@@ -284,7 +278,7 @@
     document.getElementById("live").textContent = `Kleur ${tekst}`;
   }
 
-  // --- Monster met metallic glans zoals eerder ---
+  // Monster
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
   const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
@@ -338,10 +332,8 @@
     m.drawImage(imgMask, x, y, w, h);
     m.globalCompositeOperation = "source-over";
 
-    // metallic onder de lijnen
     if (metallicType) voegMetaalGlansToeMonster(metallicType, x, y, w, h);
 
-    // lijnen
     if (!lijnenWit) {
       m.drawImage(imgLine, x, y, w, h);
     } else {
@@ -361,7 +353,6 @@
   }
 
   function voegMetaalGlansToeMonster(type, x, y, w, h) {
-    // diepte overlay
     const overlay = document.createElement("canvas");
     overlay.width = w; overlay.height = h;
     const o = overlay.getContext("2d");
@@ -380,7 +371,6 @@
     o.fillRect(0, 0, w, h);
     o.globalCompositeOperation = "destination-in";
     o.drawImage(imgMask, 0, 0, w, h);
-    o.globalCompositeOperation = "source-over";
 
     m.save();
     if (supportMode(m, "overlay")) {
@@ -396,7 +386,6 @@
     }
     m.restore();
 
-    // highlights
     const spec = document.createElement("canvas");
     spec.width = w; spec.height = h;
     const s = spec.getContext("2d");
