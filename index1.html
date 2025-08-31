@@ -55,7 +55,7 @@
     return ok;
   }
 
-  // Kleurenlijst
+  // Kleuren
   let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
@@ -68,47 +68,54 @@
   };
   const metallicKleuren = new Set(["goud","zilver"]);
 
-  // Zorg dat goud en zilver geen buren zijn, inclusief de cirkel wrap
+  // Optioneel, zorg dat goud en zilver geen buren zijn
   function scheidBuren(arr, a, b) {
     const n = arr.length;
-    let ia = arr.indexOf(a);
-    let ib = arr.indexOf(b);
+    let ia = arr.indexOf(a), ib = arr.indexOf(b);
     if (ia < 0 || ib < 0) return arr;
-    const zijnBuren = (x, y) => Math.abs(x - y) === 1 || Math.abs(x - y) === n - 1;
-    if (!zijnBuren(ia, ib)) return arr;
-    // verplaats b twee posities voorbij a
+    const buren = (x, y) => Math.abs(x - y) === 1 || Math.abs(x - y) === n - 1;
+    if (!buren(ia, ib)) return arr;
     const [item] = arr.splice(ib, 1);
     ia = arr.indexOf(a);
-    let insert = (ia + 2) % arr.length;
+    const insert = (ia + 2) % arr.length;
     arr.splice(insert, 0, item);
     return arr;
   }
   opties = scheidBuren(opties, "goud", "zilver");
 
-  // Segmenttekst overal zwart bij dit palet
-  const donkereSegmenten = new Set([]);
-  const lijnenWitKleuren = new Set([]); // geen witte lijnen in deze set
-  const pupilKleuren = new Set([]);     // geen extra pupillen in deze set
+  const donkereSegmenten = new Set([]); // zwarte segmenttekst
+  const lijnenWitKleuren = new Set([]); // niet nodig bij dit palet
+  const pupilKleuren = new Set([]);     // niet nodig bij dit palet
 
   // Spinner
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190; // rad links in canvas
+  const CX = 220, CY = 200, R = 190; // rad links, ruimte rechts voor pijl
   let hoek = 0, bezig = false, gekozen = opties[0];
+
+  // Normaliseer bogen, maak end altijd groter of gelijk aan start
+  function normBoog(a0, a1) {
+    const tau = Math.PI * 2;
+    let s = a0, e = a1;
+    while (e < s) e += tau;
+    return [s, e];
+  }
 
   // Metallic gloed in segment, licht staat vast aan het scherm
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
 
+    const [s, e] = normBoog(a0, a1);
+
     rctx.save();
-    // clip tot de segmentvorm
+    // clip tot segmentvorm
     rctx.beginPath();
     rctx.moveTo(CX, CY);
-    rctx.arc(CX, CY, R, a0, a1);
+    rctx.arc(CX, CY, R, s, e, false);
     rctx.closePath();
     rctx.clip();
 
-    // diepte overlay
+    // diepte overlay in schermcoördinaten
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -137,7 +144,7 @@
     }
     rctx.restore();
 
-    // diagonale glansstrepen in schermcoördinaten
+    // diagonale glansstrepen
     rctx.save();
     rctx.translate(CX, CY);
     rctx.rotate(-Math.PI / 10);
@@ -155,48 +162,59 @@
     rctx.globalAlpha = 1;
 
     // highlights
-    const rg  = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
-    rg.addColorStop(0.00, "rgba(255,255,255,1.00)");
-    rg.addColorStop(0.35, "rgba(255,255,255,0.60)");
-    rg.addColorStop(1.00, "rgba(255,255,255,0.00)");
-    const rg2 = rctx.createRadialGradient(CX + R * 0.35, CY + R * 0.35, 0, CX + R * 0.35, CY + R * 0.35, R * 0.45);
-    rg2.addColorStop(0.00, "rgba(255,255,255,0.85)");
-    rg2.addColorStop(0.40, "rgba(255,255,255,0.35)");
-    rg2.addColorStop(1.00, "rgba(255,255,255,0.00)");
-
     rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
-      rctx.fillStyle = rg;  rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
-      rctx.fillStyle = rg2; rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+      const rg = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
+      rg.addColorStop(0.00, "rgba(255,255,255,1.00)");
+      rg.addColorStop(0.35, "rgba(255,255,255,0.60)");
+      rg.addColorStop(1.00, "rgba(255,255,255,0.00)");
+      rctx.fillStyle = rg;
+      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+
+      const rg2 = rctx.createRadialGradient(CX + R * 0.35, CY + R * 0.35, 0, CX + R * 0.35, CY + R * 0.35, R * 0.45);
+      rg2.addColorStop(0.00, "rgba(255,255,255,0.85)");
+      rg2.addColorStop(0.40, "rgba(255,255,255,0.35)");
+      rg2.addColorStop(1.00, "rgba(255,255,255,0.00)");
+      rctx.fillStyle = rg2;
+      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+
       rctx.globalCompositeOperation = "source-over";
     } else {
       rctx.globalAlpha = 0.7;
-      rctx.fillStyle = rg; rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+      const rg = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
+      rg.addColorStop(0.00, "rgba(255,255,255,1.00)");
+      rg.addColorStop(0.35, "rgba(255,255,255,0.60)");
+      rg.addColorStop(1.00, "rgba(255,255,255,0.00)");
+      rctx.fillStyle = rg;
+      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalAlpha = 1;
     }
+    rctx.restore();
+
     rctx.restore();
   }
 
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
-    const rot = hoek * Math.PI / 180; // rad draait, licht staat vast
+    const rot = hoek * Math.PI / 180; // rad draait via offset
 
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
-      const a0 = i * stap + rot;
-      const a1 = (i + 1) * stap + rot;
+      let a0 = i * stap + rot;
+      let a1 = (i + 1) * stap + rot;
+      const [s, e] = normBoog(a0, a1);
 
       // basisvulling
       rctx.beginPath();
       rctx.moveTo(CX, CY);
-      rctx.arc(CX, CY, R, a0, a1);
+      rctx.arc(CX, CY, R, s, e, false);
       rctx.closePath();
       rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
       // metallic gloed voor goud en zilver
-      tekenMetallicInSegment(naam, a0, a1);
+      tekenMetallicInSegment(naam, s, e);
 
       // segmentlijn
       rctx.strokeStyle = "#222";
@@ -204,10 +222,11 @@
       rctx.stroke();
 
       // label
+      const mid = s + (e - s) / 2;
       const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
       rctx.translate(CX, CY);
-      rctx.rotate(i * stap + stap / 2 + rot);
+      rctx.rotate(mid);
       rctx.textAlign = "right";
       rctx.fillStyle = tekstkleur;
       rctx.font = "16px system-ui, Arial";
@@ -324,7 +343,7 @@
     m.restore();
   }
 
-  // lijnenWit, toonPupillen, metallicType: "goud" of "zilver" of null
+  // lijnenWit, toonPupillen, metallicType
   function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
     if (!assetsGereed) return;
 
@@ -447,7 +466,9 @@
 
   // init
   document.getElementById("draaiBtn").addEventListener("click", draai);
-  document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.code === "Space") && !bezig) draai(); });
+  document.addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
+  });
   renderRad();
   </script>
 </body>
