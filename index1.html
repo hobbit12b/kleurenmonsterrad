@@ -54,7 +54,7 @@
   </div>
 
   <script>
-  // ------------------ Helpers ------------------
+  // blendmodus check
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -63,7 +63,7 @@
     return ok;
   }
 
-  // Web Speech, NL standaard, speciale uitspraak voor turquoise
+  // spraak, vaste uitspraak voor turquoise met syllaben
   let nlVoice = null, enVoice = null;
   function pickVoices() {
     try {
@@ -78,28 +78,43 @@
     pickVoices();
     speechSynthesis.onvoiceschanged = pickVoices;
   }
-  const uitspraakMap = { "turquoise": "tuhr KWA zuh" };
+  function speakParts(parts, voice, lang) {
+    if (!("speechSynthesis" in window)) return;
+    const queue = parts.slice();
+    try { speechSynthesis.cancel(); } catch {}
+    const rate = 0.95, pitch = 1, volume = 1;
+    function next() {
+      if (!queue.length) return;
+      const u = new SpeechSynthesisUtterance(queue.shift());
+      if (voice) u.voice = voice;
+      u.lang = lang || voice?.lang || "nl-NL";
+      u.rate = rate; u.pitch = pitch; u.volume = volume;
+      u.onend = next;
+      speechSynthesis.speak(u);
+    }
+    next();
+  }
   function spreekKleur(naam) {
     const aan = document.getElementById("spreekToggle")?.checked;
     if (!aan || !("speechSynthesis" in window)) return;
+    const key = String(naam || "").toLowerCase().trim();
+    if (key === "turquoise") {
+      const v = enVoice || nlVoice || null;
+      const lang = enVoice ? enVoice.lang : (nlVoice ? nlVoice.lang : "nl-NL");
+      speakParts(["tuhr", "KWA", "zuh"], v, lang);
+      return;
+    }
     try {
       speechSynthesis.cancel();
-      const key = String(naam || "").toLowerCase().trim();
-      const custom = uitspraakMap[key] || null;
-      const u = new SpeechSynthesisUtterance(custom || naam);
-      if (custom) {
-        if (enVoice) u.voice = enVoice;
-        u.lang = enVoice?.lang || "en-US";
-      } else {
-        if (nlVoice) u.voice = nlVoice;
-        u.lang = nlVoice?.lang || "nl-NL";
-      }
+      const u = new SpeechSynthesisUtterance(naam);
+      if (nlVoice) u.voice = nlVoice;
+      u.lang = nlVoice?.lang || "nl-NL";
       u.rate = 1; u.pitch = 1; u.volume = 1;
       speechSynthesis.speak(u);
     } catch { /* stil falen */ }
   }
 
-  // ------------------ Config ------------------
+  // kleuren en labels
   let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
@@ -112,7 +127,7 @@
   };
   const metallicKleuren = new Set(["goud","zilver"]);
 
-  // goud en zilver geen buren
+  // goud en zilver niet naast elkaar
   function scheidBuren(arr, a, b) {
     const n = arr.length;
     let ia = arr.indexOf(a), ib = arr.indexOf(b);
@@ -125,19 +140,19 @@
     arr.splice(insert, 0, item);
     return arr;
   }
-  opties = scheidBuren(opties, "goud", "zilver");
+  opties = scheidBuren(opjes = opties, "goud", "zilver"); // typo guard, laat opties intact als fout
+  opties = scheidBuren(opjes || opties, "goud", "zilver");
 
-  const donkereSegmenten = new Set([]);   // segmenttekst zwart
-  const lijnenWitKleuren = new Set([]);   // bij dit palet niet nodig
-  const pupilKleuren = new Set([]);       // bij dit palet niet nodig
+  const donkereSegmenten = new Set([]);
+  const lijnenWitKleuren = new Set([]);
+  const pupilKleuren = new Set([]);
 
-  // ------------------ Spinner ------------------
+  // spinner
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190; // rad links, pijl rechts
+  const CX = 220, CY = 200, R = 190;
   let hoek = 0, bezig = false, gekozen = opties[0];
 
-  // zorg dat elke boog end >= start
   function normBoog(a0, a1) {
     const tau = Math.PI * 2;
     let s = a0, e = a1;
@@ -145,7 +160,6 @@
     return [s, e];
   }
 
-  // metallic gloed in segment, licht vast in schermcoördinaten
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
     const [s, e] = normBoog(a0, a1);
@@ -157,7 +171,6 @@
     rctx.closePath();
     rctx.clip();
 
-    // diepte overlay
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -169,6 +182,7 @@
       overlayGrad.addColorStop(0.50, "rgba(0,0,0,0.36)");
       overlayGrad.addColorStop(1.00, "rgba(235,235,235,0.32)");
     }
+
     rctx.save();
     if (supportMode(rctx, "overlay")) {
       rctx.globalCompositeOperation = "overlay";
@@ -186,7 +200,6 @@
     }
     rctx.restore();
 
-    // glansstrepen
     rctx.save();
     rctx.translate(CX, CY);
     rctx.rotate(-Math.PI / 10);
@@ -203,7 +216,6 @@
     rctx.restore();
     rctx.globalAlpha = 1;
 
-    // highlights
     rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
@@ -240,14 +252,10 @@
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
     const rot = hoek * Math.PI / 180;
-
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
-      let a0 = i * stap + rot;
-      let a1 = (i + 1) * stap + rot;
-      const [s, e] = normBoog(a0, a1);
+      const [s, e] = normBoog(i * stap + rot, (i + 1) * stap + rot);
 
-      // basisvulling
       rctx.beginPath();
       rctx.moveTo(CX, CY);
       rctx.arc(CX, CY, R, s, e, false);
@@ -255,15 +263,12 @@
       rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
-      // metallic gloed voor goud en zilver
       tekenMetallicInSegment(naam, s, e);
 
-      // segmentrand
       rctx.strokeStyle = "#222";
       rctx.lineWidth = 2;
       rctx.stroke();
 
-      // label
       const mid = s + (e - s) / 2;
       const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
@@ -276,7 +281,6 @@
       rctx.restore();
     }
 
-    // buitenring
     rctx.lineWidth = 6;
     rctx.strokeStyle = "#333";
     rctx.beginPath();
@@ -284,7 +288,6 @@
     rctx.stroke();
   }
 
-  // pijl buiten het rad, rechts, wijst naar links
   function tekenPijl() {
     const offset = 22;
     const tipX = CX + R + offset;
@@ -342,7 +345,6 @@
         toonResultaat(gekozen);
         kleurMonster(kleurMap[gekozen], lijnenWit, toonPupillen, metallicType);
 
-        // spreek de kleur
         spreekKleur(gekozen);
 
         bezig = false;
@@ -357,7 +359,7 @@
     document.getElementById("live").textContent = `Kleur ${tekst}`;
   }
 
-  // ------------------ Monster ------------------
+  // monster
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
   const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
@@ -388,7 +390,6 @@
     m.restore();
   }
 
-  // lijnenWit, toonPupillen, metallicType: "goud" of "zilver" of null
   function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
     if (!assetsGereed) return;
 
@@ -403,7 +404,6 @@
     const x = Math.round((mCanvas.width - w) / 2);
     const y = Math.round((mCanvas.height - h) / 2);
 
-    // vulling binnen masker
     m.save();
     m.fillStyle = vulkleur;
     m.fillRect(x, y, w, h);
@@ -412,10 +412,8 @@
     m.drawImage(imgMask, x, y, w, h);
     m.globalCompositeOperation = "source-over";
 
-    // metallic gloed
     if (metallicType) voegMetaalGlansToeMonster(metallicType, x, y, w, h);
 
-    // lijnenlaag
     if (!lijnenWit) {
       m.drawImage(imgLine, x, y, w, h);
     } else {
