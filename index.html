@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+Met deze code werkte de spinner en zag ik nog een kleurenmonster.
+Nu i
+
+<!DOCTYPE html> 
 <html lang="nl">
 <head>
   <meta charset="UTF-8" />
@@ -6,31 +9,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
-      display: grid;
-      grid-template-columns: 460px 520px;
-      gap: 24px;
+      display: flex;
+      flex-direction: row;
       justify-content: center;
-      align-items: start;
+      align-items: flex-start;
+      gap: 30px;
       padding: 20px;
-      font-family: system-ui, Arial, sans-serif;
+      font-family: Arial, sans-serif;
       background: #f6f7fb;
     }
-    .kolom { display: flex; flex-direction: column; align-items: center; }
+    .kolom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     h1 { font-size: 20px; margin: 10px 0; }
     canvas { background: #fff; border: 4px solid #222; border-radius: 12px; }
     #rad { border-radius: 50%; }
     button {
-      margin-top: 12px; padding: 10px 20px; font-size: 16px;
-      border: 0; border-radius: 12px; background: #222; color: #fff; cursor: pointer;
+      margin-top: 12px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      background: #222;
+      color: white;
+      cursor: pointer;
     }
-    #resultaat { margin-top: 10px; font-size: 18px; font-weight: 700; }
+    #resultaat { margin-top: 10px; font-size: 18px; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="kolom">
     <h1>Spinner</h1>
-    <canvas id="rad" width="400" height="400" aria-label="kleurenspin"></canvas>
-    <button id="draaiBtn">Draai</button>
+    <canvas id="rad" width="400" height="400"></canvas>
+    <button id="draaiBtn">Draai!</button>
     <div id="resultaat"></div>
   </div>
 
@@ -40,25 +53,19 @@
   </div>
 
   <script>
-    // Keuzes, zwart 1 keer
+    // Kleurenlijst
     const opties = [
-      "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw","Roze","Paars",
-      "Rood","Lichtgroen","Donkergroen","Geel","Oranje"
+      "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw",
+      "Roze","Paars","Rood","Lichtgroen","Donkergroen",
+      "Geel","Oranje","Zwart"
     ];
 
+    // Kleurwaarden
     const kleurMap = {
-      "Wit":"#ffffff",
-      "Grijs":"#bdbdbd",
-      "Zwart":"#000000",
-      "Lichtblauw":"#87cefa",
-      "Donkerblauw":"#1e3a8a",
-      "Roze":"#ff9acb",
-      "Paars":"#8b5cf6",
-      "Rood":"#ef4444",
-      "Lichtgroen":"#86efac",
-      "Donkergroen":"#166534",
-      "Geel":"#fde047",
-      "Oranje":"#fb923c"
+      "Wit":"#ffffff","Grijs":"#bdbdbd","Zwart":"#000000",
+      "Lichtblauw":"#87cefa","Donkerblauw":"#1e3a8a","Roze":"#ff9acb",
+      "Paars":"#8b5cf6","Rood":"#ef4444","Lichtgroen":"#86efac",
+      "Donkergroen":"#166534","Geel":"#fde047","Oranje":"#fb923c"
     };
 
     // Spinner
@@ -67,197 +74,99 @@
     const R = rad.width / 2;
     let hoek = 0, bezig = false, gekozenKleur = "Wit";
 
-    function tekenSchijven() {
+    function tekenRad() {
       const stap = 2 * Math.PI / opties.length;
       for (let i = 0; i < opties.length; i++) {
-        const naam = opties[i];
         rctx.beginPath();
         rctx.moveTo(R, R);
-        rctx.arc(R, R, R - 4, i * stap, (i + 1) * stap);
-        rctx.fillStyle = kleurMap[naam] || "#000";
+        rctx.arc(R, R, R-4, i*stap, (i+1)*stap);
+        rctx.fillStyle = kleurMap[opties[i]] || "#000";
         rctx.fill();
-        rctx.strokeStyle = "#222";
         rctx.stroke();
-
-        // tekstkleur voor donkere vlakken
-        const tekstkleur =
-          (naam === "Zwart" || naam === "Donkerblauw" || naam === "Donkergroen") ? "#fff" : "#000";
-
+        // Tekst
         rctx.save();
-        rctx.translate(R, R);
-        rctx.rotate(i * stap + stap / 2);
-        rctx.textAlign = "right";
-        rctx.fillStyle = tekstkleur;
-        rctx.font = "16px system-ui, Arial";
-        rctx.fillText(naam, R - 12, 6);
+        rctx.translate(R,R);
+        rctx.rotate(i*stap+stap/2);
+        rctx.textAlign="right";
+        rctx.fillStyle="#000";
+        rctx.font="16px Arial";
+        rctx.fillText(opties[i], R-10, 5);
         rctx.restore();
       }
-    }
-
-    function tekenPijl() {
-      // pijl rechts van het rad, tip naar binnen gericht
-      const tipX = rad.width - 8;     // punt tegen de rand van het rad
-      const tipY = R;
-      const baseX = rad.width - 44;   // basis iets meer naar links
-      const halfH = 18;
-
-      // gespiegeld horizontaal ten opzichte van vroegere pijl
+      // Pijl
       rctx.beginPath();
-      rctx.moveTo(tipX, tipY);                 // punt
-      rctx.lineTo(baseX, tipY - halfH);        // bovenbasis
-      rctx.lineTo(baseX, tipY + halfH);        // onderbasis
+      rctx.moveTo(R-20,10);
+      rctx.lineTo(R+20,10);
+      rctx.lineTo(R,40);
       rctx.closePath();
-      rctx.fillStyle = "#222";
+      rctx.fillStyle="#222";
       rctx.fill();
-    }
-
-    function renderRad() {
-      rctx.clearRect(0, 0, rad.width, rad.height);
-      rctx.save();
-      rctx.translate(R, R);
-      rctx.rotate(hoek * Math.PI / 180);
-      rctx.translate(-R, -R);
-      tekenSchijven();
-      rctx.restore();
-      tekenPijl(); // na de rotatie tekenen, zo blijft de pijl vast staan
     }
 
     function draai() {
       if (bezig) return;
       bezig = true;
-      const doel = Math.random() * 360 + 1080;
+      const doel = Math.random()*360 + 1080; // min 3 rondjes
       const duur = 3000;
       let start = null;
 
       function anim(t) {
         if (!start) start = t;
-        const p = Math.min((t - start) / duur, 1);
-        const ease = 1 - Math.pow(1 - p, 3);
-        hoek = doel * ease;
+        const p = Math.min((t-start)/duur,1);
+        const ease = 1 - Math.pow(1-p,3);
+        hoek = doel*ease;
 
-        renderRad();
+        rctx.clearRect(0,0,rad.width,rad.height);
+        rctx.save();
+        rctx.translate(R,R);
+        rctx.rotate(hoek*Math.PI/180);
+        rctx.translate(-R,-R);
+        tekenRad();
+        rctx.restore();
 
-        if (p < 1) requestAnimationFrame(anim);
+        if (p<1) requestAnimationFrame(anim);
         else {
-          bezig = false;
-          const idx = bepaalIndex(hoek);
-          gekozenKleur = opties[idx];
-          document.getElementById("resultaat").textContent =
-            "Het monster wordt: " + gekozenKleur + ".";
-          kleurMonsterAutomatisch();
+          bezig=false;
+          const idx=bepaalIndex(hoek);
+          gekozenKleur=opties[idx];
+          document.getElementById("resultaat").innerText="Het monster wordt: "+gekozenKleur;
+          kleurMonster();
         }
       }
       requestAnimationFrame(anim);
     }
 
-    // Correcte sectorbepaling voor pijl op drie uur
     function bepaalIndex(hoekGraden) {
-      const norm = ((hoekGraden % 360) + 360) % 360;   // 0 tot 360
-      const stap = 360 / opties.length;
-      // pijl staat op 0 graden (drie uur), sector onder de pijl is de sector van (360 - norm)
-      return Math.floor(((360 - norm) % 360) / stap);
+      const norm = ((hoekGraden%360)+360)%360;
+      const stap=360/optes.length;
+      return Math.floor((optes.length-(norm/stap))%optes.length);
     }
 
-    document.getElementById("draaiBtn").addEventListener("click", draai);
-    renderRad();
+    // Monster
+    const monster=document.getElementById("monster");
+    const mctx=monster.getContext("2d");
+    const img=new Image();
+    img.src="kleurenmonster-transparant.png"; // zelfde map
+    img.onload=()=> kleurMonster();
 
-    // Monster met flood fill
-    const monster = document.getElementById("monster");
-    const mctx = monster.getContext("2d");
-    const img = new Image();
-    img.src = "kleurenmonster-transparant.png";
-    let drawBox = {x:0, y:0, w:monster.width, h:monster.height};
-
-    img.onload = () => { tekenMonster(); kleurMonsterAutomatisch(); };
-
-    function tekenMonster() {
+    function kleurMonster() {
       mctx.clearRect(0,0,monster.width,monster.height);
-      const s = Math.min(monster.width / img.width, monster.height / img.height);
-      const w = Math.floor(img.width * s);
-      const h = Math.floor(img.height * s);
-      const x = Math.floor((monster.width - w) / 2);
-      const y = Math.floor((monster.height - h) / 2);
-      drawBox = {x, y, w, h};
-      mctx.drawImage(img, x, y, w, h);
+      const kleur=kleurMap[gekozenKleur]||"#000";
+      // achtergrondkleur als vulling voor het monster
+      mctx.fillStyle=kleur;
+      mctx.fillRect(0,0,monster.width,monster.height);
+
+      // masker toepassen met transparant plaatje
+      mctx.globalCompositeOperation="destination-in";
+      mctx.drawImage(img,0,0,monster.width,monster.height);
+      mctx.globalCompositeOperation="source-over";
+
+      // lijntekening eroverheen
+      mctx.drawImage(img,0,0,monster.width,monster.height);
     }
 
-    function hexNaarRGB(hex) {
-      const c = hex.replace("#","").trim();
-      const n = parseInt(c.length === 3 ? c.split("").map(ch=>ch+ch).join("") : c, 16);
-      return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
-    }
-
-    function floodFillTransparant(x, y, kleurHex, alphaThreshold = 12) {
-      const W = monster.width, H = monster.height;
-      const imgData = mctx.getImageData(0,0,W,H);
-      const data = imgData.data;
-
-      function idx(px, py){ return (py * W + px) * 4; }
-
-      const start = idx(x, y);
-      const sa = data[start+3];
-      const sr = data[start], sg = data[start+1], sb = data[start+2];
-
-      const target = {r: sr, g: sg, b: sb, a: sa};
-      const fill = hexNaarRGB(kleurHex);
-
-      function match(i){
-        const a = data[i+3];
-        if (target.a < alphaThreshold) {
-          return a < alphaThreshold;  // start op transparant, vul transparant gebied
-        } else {
-          const dr = data[i] - target.r;
-          const dg = data[i+1] - target.g;
-          const db = data[i+2] - target.b;
-          return (dr*dr + dg*dg + db*db) < 60*60 && Math.abs(a - target.a) < 40;
-        }
-      }
-
-      const stack = [[x,y]];
-      while (stack.length) {
-        let [cx, cy] = stack.pop();
-        let i = idx(cx, cy);
-        while (cx >= 0 && match(i)) { cx--; i -= 4; }
-        cx++; i += 4;
-        let spanUp = false, spanDown = false;
-        while (cx < W && match(i)) {
-          data[i]   = fill.r;
-          data[i+1] = fill.g;
-          data[i+2] = fill.b;
-          data[i+3] = 255;
-
-          if (cy > 0) {
-            const iu = idx(cx, cy - 1);
-            if (match(iu)) { if (!spanUp) { stack.push([cx, cy - 1]); spanUp = true; } }
-            else spanUp = false;
-          }
-          if (cy < H - 1) {
-            const id = idx(cx, cy + 1);
-            if (match(id)) { if (!spanDown) { stack.push([cx, cy + 1]); spanDown = true; } }
-            else spanDown = false;
-          }
-
-          cx++; i += 4;
-        }
-      }
-      mctx.putImageData(imgData, 0, 0);
-    }
-
-    function kleurMonsterAutomatisch() {
-      tekenMonster();
-      const kleur = kleurMap[gekozenKleur] || "#000000";
-      const seedX = Math.floor(drawBox.x + drawBox.w * 0.5);
-      const seedY = Math.floor(drawBox.y + drawBox.h * 0.60);
-      floodFillTransparant(seedX, seedY, kleur, 12);
-    }
-
-    monster.addEventListener("click", (e)=>{
-      const rect = monster.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) * monster.width / rect.width);
-      const y = Math.floor((e.clientY - rect.top) * monster.height / rect.height);
-      const kleur = kleurMap[gekozenKleur] || "#000000";
-      floodFillTransparant(x, y, kleur, 12);
-    });
+    document.getElementById("draaiBtn").addEventListener("click",draai);
+    tekenRad();
   </script>
 </body>
 </html>
