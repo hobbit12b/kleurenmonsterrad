@@ -60,7 +60,7 @@
       "turquoise":"#40E0D0"
     };
 
-    // Segmenttekst, alle segmenten hebben zwarte tekst
+    // Segmenttekst
     const donkereSegmenten = new Set([]);
 
     // Lijnkleur en pupillenlogica, uit voor deze set
@@ -163,7 +163,7 @@
           const idx = indexOnderPijl();
           gekozen = opties[idx];
 
-          const lijnenWit   = lijnenWitKleuren.has(gekozen);
+          const lijnenWit    = lijnenWitKleuren.has(gekozen);
           const toonPupillen = pupilKleuren.has(gekozen);
           const metallicType = metallicKleuren.has(gekozen) ? gekozen : null;
 
@@ -185,172 +185,3 @@
     // Monster assets
     const mCanvas = document.getElementById("monster");
     const m = mCanvas.getContext("2d");
-    const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
-    const imgLine  = new Image();  imgLine.src  = "monster-line.png";
-    const imgPupil = new Image();  imgPupil.src = "monster-pupillen.png";
-
-    let assetsGereed = false;
-    Promise.all([
-      new Promise(res => imgMask.onload  = res),
-      new Promise(res => imgLine.onload  = res),
-      new Promise(res => imgPupil.onload = res)
-    ]).then(() => {
-      assetsGereed = true;
-      tekenMonsterKader();
-      kleurMonster(kleurMap[gekozen], false, false, null);
-    });
-
-    function tekenMonsterKader() {
-      m.clearRect(0, 0, mCanvas.width, mCanvas.height);
-      m.save();
-      m.lineWidth = 6;
-      m.strokeStyle = "#222";
-      m.fillStyle = "#fff";
-      m.beginPath();
-      rondeRechthoek(m, 12, 12, mCanvas.width - 24, mCanvas.height - 24, 18);
-      m.fill();
-      m.stroke();
-      m.restore();
-    }
-
-    // lijnenWit, toonPupillen, metallicType: "goud" of "zilver" of null
-    function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
-      if (!assetsGereed) return;
-
-      tekenMonsterKader();
-
-      // schalen en centreren
-      const pad = 24;
-      const doelW = mCanvas.width - pad * 2;
-      const doelH = mCanvas.height - pad * 2;
-      const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
-      const w = imgMask.width * ratio;
-      const h = imgMask.height * ratio;
-      const x = (mCanvas.width - w) / 2;
-      const y = (mCanvas.height - h) / 2;
-
-      // 1. basisvulling binnen het masker
-      m.save();
-      m.fillStyle = vulkleur;
-      m.fillRect(x, y, w, h);
-      m.globalCompositeOperation = "destination-in";
-      m.imageSmoothingEnabled = true;
-      m.drawImage(imgMask, x, y, w, h);
-      m.globalCompositeOperation = "source-over";
-
-      // 2. metallic glans als van toepassing, onder de lijnen
-      if (metallicType) {
-        voegMetaalGlansToe(metallicType, x, y, w, h);
-      }
-
-      // 3. lijnenlaag
-      if (!lijnenWit) {
-        m.drawImage(imgLine, x, y, w, h);
-      } else {
-        const off = document.createElement("canvas");
-        off.width = Math.max(1, Math.floor(w));
-        off.height = Math.max(1, Math.floor(h));
-        const o = off.getContext("2d");
-        o.imageSmoothingEnabled = true;
-        o.fillStyle = "#ffffff";
-        o.fillRect(0, 0, off.width, off.height);
-        o.globalCompositeOperation = "destination-in";
-        o.drawImage(imgLine, 0, 0, off.width, off.height);
-        o.globalCompositeOperation = "source-over";
-        m.drawImage(off, x, y);
-      }
-
-      // 4. pupillenlaag indien gewenst
-      if (toonPupillen) m.drawImage(imgPupil, x, y, w, h);
-
-      m.restore();
-    }
-
-    // Subtiele metallic glans voor goud en zilver, alleen binnen het masker
-    function voegMetaalGlansToe(type, x, y, w, h) {
-      const off = document.createElement("canvas");
-      off.width = Math.max(1, Math.floor(w));
-      off.height = Math.max(1, Math.floor(h));
-      const o = off.getContext("2d");
-      o.imageSmoothingEnabled = true;
-
-      // basis verloop
-      const lg = o.createLinearGradient(0, 0, 0, h);
-      if (type === "goud") {
-        lg.addColorStop(0.00, "rgba(255,255,240,0.45)");
-        lg.addColorStop(0.20, "rgba(255,255,255,0.15)");
-        lg.addColorStop(0.50, "rgba(0,0,0,0.10)");
-        lg.addColorStop(0.80, "rgba(255,255,210,0.25)");
-        lg.addColorStop(1.00, "rgba(0,0,0,0.08)");
-      } else {
-        // zilver
-        lg.addColorStop(0.00, "rgba(255,255,255,0.50)");
-        lg.addColorStop(0.25, "rgba(220,220,220,0.20)");
-        lg.addColorStop(0.55, "rgba(0,0,0,0.12)");
-        lg.addColorStop(0.80, "rgba(240,240,240,0.25)");
-        lg.addColorStop(1.00, "rgba(0,0,0,0.10)");
-      }
-      o.fillStyle = lg;
-      o.fillRect(0, 0, w, h);
-
-      // speculaire highlight linksboven
-      o.save();
-      o.translate(w * 0.35, h * 0.28);
-      o.scale(1.4, 1.0); // ellips
-      const rg = o.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) * 0.45);
-      rg.addColorStop(0.0, "rgba(255,255,255,0.55)");
-      rg.addColorStop(0.3, "rgba(255,255,255,0.25)");
-      rg.addColorStop(1.0, "rgba(255,255,255,0)");
-      o.fillStyle = rg;
-      o.beginPath();
-      o.arc(0, 0, Math.max(w, h) * 0.45, 0, Math.PI * 2);
-      o.fill();
-      o.restore();
-
-      // smalle glansbaan diagonaal
-      o.save();
-      o.globalAlpha = 0.35;
-      o.translate(w * 0.15, h * 0.15);
-      o.rotate(-Math.PI / 10);
-      const strip = o.createLinearGradient(0, 0, w * 0.9, 0);
-      strip.addColorStop(0.0, "rgba(255,255,255,0)");
-      strip.addColorStop(0.5, "rgba(255,255,255,0.35)");
-      strip.addColorStop(1.0, "rgba(255,255,255,0)");
-      o.fillStyle = strip;
-      o.fillRect(0, 0, w * 0.9, h * 0.10);
-      o.restore();
-
-      // clip tot de vorm met het masker
-      o.globalCompositeOperation = "destination-in";
-      o.drawImage(imgMask, 0, 0, w, h);
-      o.globalCompositeOperation = "source-over";
-
-      // zacht over de vulling leggen
-      m.save();
-      m.globalCompositeOperation = "soft-light";
-      m.drawImage(off, x, y);
-      m.globalCompositeOperation = "source-over";
-      m.restore();
-    }
-
-    function rondeRechthoek(ctx, x, y, w, h, r) {
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-      ctx.lineTo(x + r, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-    }
-
-    // init
-    renderRad();
-    document.getElementById("draaiBtn").addEventListener("click", draai);
-    document.addEventListener("keydown", e => {
-      if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
-    });
-  </script>
-</body>
-</html>
