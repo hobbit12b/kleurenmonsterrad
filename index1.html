@@ -9,7 +9,7 @@
     * { box-sizing: border-box; }
     body {
       display: grid;
-      grid-template-columns: 480px 520px;
+      grid-template-columns: 520px 520px;
       gap: 24px;
       justify-content: center;
       align-items: start;
@@ -21,7 +21,7 @@
     .kolom { display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 20px; margin: 10px 0; }
     canvas { background: var(--panel); border: 4px solid var(--fg); border-radius: 12px; }
-    #rad { width: 440px; height: 400px; }
+    #rad { width: 500px; height: 400px; }   /* extra ruimte rechts voor de pijl */
     button {
       margin-top: 12px; padding: 10px 20px; font-size: 16px;
       border: 0; border-radius: 12px; background: var(--fg); color: #fff; cursor: pointer;
@@ -34,7 +34,7 @@
 <body>
   <div class="kolom">
     <h1>Spinner</h1>
-    <canvas id="rad" width="440" height="400" aria-label="kleurenspin"></canvas>
+    <canvas id="rad" width="500" height="400" aria-label="kleurenspin"></canvas>
     <button id="draaiBtn" aria-describedby="resultaat">Draai</button>
     <div id="resultaat"></div>
     <div id="live" role="status" aria-live="polite"></div>
@@ -46,10 +46,9 @@
   </div>
 
   <script>
-    // Kleuren en labels, herhaling toegestaan
-    const opties = [
-      "zalm roze","lila","beige","wit","zilver","goud","turquoise"
-    ];
+  (() => {
+    // kleuren en labels, herhaling toegestaan
+    const opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
     const kleurMap = {
       "zalm roze":"#FFA07A",
       "lila":"#C8A2C8",
@@ -60,20 +59,20 @@
       "turquoise":"#40E0D0"
     };
 
-    // Segmenttekst
+    // segmenttekst, zwarte tekst overal
     const donkereSegmenten = new Set([]);
 
-    // Lijnkleur en pupillenlogica, uit voor deze set
+    // lijnen wit en pupillen, uit bij deze set
     const lijnenWitKleuren = new Set([]);
-    const pupilKleuren    = new Set([]);
+    const pupilKleuren = new Set([]);
 
-    // Metallic glans
+    // metallic glans
     const metallicKleuren = new Set(["goud","zilver"]);
 
-    // Spinner
+    // spinner
     const rad = document.getElementById("rad");
     const rctx = rad.getContext("2d");
-    const CX = 200, CY = 200, R = 190;
+    const CX = 220, CY = 200, R = 190;   // rad links in het canvas
     let hoek = 0, bezig = false, gekozen = opties[0];
 
     function tekenSchijven() {
@@ -107,13 +106,13 @@
       rctx.stroke();
     }
 
-    // Pijl buiten het rad, rechts, wijst naar links
+    // pijl buiten het rad, geheel binnen het canvas
     function tekenPijl() {
       const offset = 22;
-      const tipX = CX + R + offset;
+      const tipX = CX + R + offset;  // punt naast de cirkel
       const tipY = CY;
-      const baseX = tipX + 30;
-      const halfH = 20;
+      const baseX = tipX + 34;       // basis verder naar rechts, maar nog binnen 500
+      const halfH = 22;
 
       rctx.beginPath();
       rctx.moveTo(tipX, tipY);
@@ -149,6 +148,7 @@
       if (bezig) return;
       bezig = true;
       document.getElementById("draaiBtn").disabled = true;
+
       let snelheid = 20 + Math.random() * 15;
       hoek += 360 * 4;
 
@@ -162,8 +162,7 @@
           renderRad();
           const idx = indexOnderPijl();
           gekozen = opties[idx];
-
-          const lijnenWit    = lijnenWitKleuren.has(gekozen);
+          const lijnenWit = lijnenWitKleuren.has(gekozen);
           const toonPupillen = pupilKleuren.has(gekozen);
           const metallicType = metallicKleuren.has(gekozen) ? gekozen : null;
 
@@ -182,6 +181,50 @@
       document.getElementById("live").textContent = `Kleur ${tekst}`;
     }
 
-    // Monster assets
+    // monster
     const mCanvas = document.getElementById("monster");
     const m = mCanvas.getContext("2d");
+    const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
+    const imgLine  = new Image();  imgLine.src  = "monster-line.png";
+    const imgPupil = new Image();  imgPupil.src = "monster-pupillen.png";
+
+    let assetsGereed = false;
+    Promise.all([
+      new Promise(res => imgMask.onload  = res),
+      new Promise(res => imgLine.onload  = res),
+      new Promise(res => imgPupil.onload = res)
+    ]).then(() => {
+      assetsGereed = true;
+      tekenMonsterKader();
+      kleurMonster(kleurMap[gekozen], false, false, null);
+    });
+
+    function tekenMonsterKader() {
+      m.clearRect(0, 0, mCanvas.width, mCanvas.height);
+      m.save();
+      m.lineWidth = 6;
+      m.strokeStyle = "#222";
+      m.fillStyle = "#fff";
+      m.beginPath();
+      rondeRechthoek(m, 12, 12, mCanvas.width - 24, mCanvas.height - 24, 18);
+      m.fill();
+      m.stroke();
+      m.restore();
+    }
+
+    // lijnenWit, toonPupillen, metallicType: "goud" of "zilver" of null
+    function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
+      if (!assetsGereed) return;
+
+      tekenMonsterKader();
+
+      const pad = 24;
+      const doelW = mCanvas.width - pad * 2;
+      const doelH = mCanvas.height - pad * 2;
+      const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
+      const w = Math.max(1, Math.round(imgMask.width * ratio));
+      const h = Math.max(1, Math.round(imgMask.height * ratio));
+      const x = Math.round((mCanvas.width - w) / 2);
+      const y = Math.round((mCanvas.height - h) / 2);
+
+      // vulling binnen
