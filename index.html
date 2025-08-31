@@ -20,7 +20,6 @@
     }
     .kolom { display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 20px; margin: 10px 0; }
-    /* iets bredere canvas voor pijl buiten het rad */
     canvas { background: var(--panel); border: 4px solid var(--fg); border-radius: 12px; }
     #rad { width: 440px; height: 400px; }
     button {
@@ -59,11 +58,10 @@
     };
     const donkereKleuren = new Set(["Zwart","Donkerblauw","Donkergroen"]);
 
-    // Spinner variabelen
+    // Spinner
     const rad = document.getElementById("rad");
     const rctx = rad.getContext("2d");
-    // wiel staat gecentreerd op 200,200 met straal 190, extra ruimte rechts voor pijl
-    const CX = 200, CY = 200, R = 190;
+    const CX = 200, CY = 200, R = 190;  // wiel in het canvas, extra ruimte rechts voor de pijl
     let hoek = 0, bezig = false, gekozen = "Wit";
 
     function tekenSchijven() {
@@ -91,7 +89,6 @@
         rctx.fillText(naam, R - 12, 6);
         rctx.restore();
       }
-      // rand
       rctx.lineWidth = 6;
       rctx.strokeStyle = "#333";
       rctx.beginPath();
@@ -99,23 +96,22 @@
       rctx.stroke();
     }
 
-    // pijl buiten het rad, aan de rechterzijde, horizontaal gespiegeld en wijzend naar links
+    // Pijl buiten het rad, rechts, wijst naar links
     function tekenPijl() {
-      const offset = 22;            // afstand buiten de cirkel
-      const tipX = CX + R + offset; // punt van de pijl rechts van de cirkel
+      const offset = 22;
+      const tipX = CX + R + offset;
       const tipY = CY;
-      const baseX = tipX + 30;      // basis verder naar rechts
+      const baseX = tipX + 30;
       const halfH = 20;
 
       rctx.beginPath();
-      rctx.moveTo(tipX, tipY);                 // punt
-      rctx.lineTo(baseX, tipY - halfH);        // bovenbasis
-      rctx.lineTo(baseX, tipY + halfH);        // onderbasis
+      rctx.moveTo(tipX, tipY);
+      rctx.lineTo(baseX, tipY - halfH);
+      rctx.lineTo(baseX, tipY + halfH);
       rctx.closePath();
       rctx.fillStyle = "#222";
       rctx.fill();
 
-      // klein lager rond asje in het midden van het wiel
       rctx.beginPath();
       rctx.arc(CX, CY, 6, 0, Math.PI * 2);
       rctx.fill();
@@ -129,12 +125,11 @@
       rctx.translate(-CX, -CY);
       tekenSchijven();
       rctx.restore();
-      tekenPijl(); // pijl blijft vast staan
+      tekenPijl();
     }
 
     function indexOnderPijl() {
       const n = opties.length, stap = 360 / n;
-      // pijl wijst naar het segment op drie uur, dus we nemen -hoek
       let a = (-hoek) % 360; if (a < 0) a += 360;
       return Math.floor(a / stap) % n;
     }
@@ -155,8 +150,9 @@
           renderRad();
           const idx = indexOnderPijl();
           gekozen = opties[idx];
+          const donker = donkereKleuren.has(gekozen);
           toonResultaat(gekozen);
-          kleurMonster(kleurMap[gekozen], donkereKleuren.has(gekozen));
+          kleurMonster(kleurMap[gekozen], donker, donker);
           bezig = false;
           document.getElementById("draaiBtn").disabled = false;
         }
@@ -169,20 +165,23 @@
       document.getElementById("live").textContent = `Kleur ${tekst}`;
     }
 
-    // Monster met masker en lijnlaag
+    // Monster assets
     const mCanvas = document.getElementById("monster");
     const m = mCanvas.getContext("2d");
-    const imgMask = new Image();  imgMask.src = "monster-mask.png";   // witte silhouette
-    const imgLine = new Image();  imgLine.src = "monster-line.png";   // alleen lijnen
+    const imgMask = new Image();     imgMask.src = "monster-mask.png";       // witte silhouette
+    const imgLine = new Image();     imgLine.src = "monster-line.png";       // lijnlaag
+    const imgPupil = new Image();    imgPupil.src = "monster-pupillen.png";  // alleen pupillen
 
     let assetsGereed = false;
     Promise.all([
       new Promise(res => imgMask.onload = res),
-      new Promise(res => imgLine.onload = res)
+      new Promise(res => imgLine.onload = res),
+      new Promise(res => imgPupil.onload = res)
     ]).then(() => {
       assetsGereed = true;
       tekenMonsterKader();
-      kleurMonster(kleurMap[gekozen], donkereKleuren.has(gekozen));
+      const donker = donkereKleuren.has(gekozen);
+      kleurMonster(kleurMap[gekozen], donker, donker);
     });
 
     function tekenMonsterKader() {
@@ -198,7 +197,8 @@
       m.restore();
     }
 
-    function kleurMonster(vulkleur, lijnenWit) {
+    // lijnenWit bepaalt kleur van de lijnen, toonPupillen bepaalt of monster-pupillen.png wordt getekend
+    function kleurMonster(vulkleur, lijnenWit, toonPupillen) {
       if (!assetsGereed) return;
 
       tekenMonsterKader();
@@ -213,40 +213,36 @@
       const x = (mCanvas.width - w) / 2;
       const y = (mCanvas.height - h) / 2;
 
-      // 1. kleurvlak
+      // 1. kleurvlak in de vorm van het monster
       m.save();
       m.fillStyle = vulkleur;
       m.fillRect(x, y, w, h);
-
-      // 2. masker toepassen
       m.globalCompositeOperation = "destination-in";
       m.imageSmoothingEnabled = true;
       m.drawImage(imgMask, x, y, w, h);
-
-      // 3. terug naar normale compositie
       m.globalCompositeOperation = "source-over";
 
-      // 4. lijnlaag, desgewenst wit getint
+      // 2. lijnenlaag
       if (!lijnenWit) {
-        // gewoon de originele lijnen
         m.drawImage(imgLine, x, y, w, h);
       } else {
-        // tint de lijnen naar wit via een offscreen canvas
+        // tint lijnen naar wit via offscreen canvas
         const off = document.createElement("canvas");
         off.width = Math.max(1, Math.floor(w));
         off.height = Math.max(1, Math.floor(h));
         const o = off.getContext("2d");
         o.imageSmoothingEnabled = true;
-
-        // vul met wit, dan maskeren met de lijn-alfakanaal
         o.fillStyle = "#ffffff";
         o.fillRect(0, 0, off.width, off.height);
         o.globalCompositeOperation = "destination-in";
         o.drawImage(imgLine, 0, 0, off.width, off.height);
         o.globalCompositeOperation = "source-over";
-
-        // getinte lijnen tekenen
         m.drawImage(off, x, y);
+      }
+
+      // 3. pupillen alleen bij Donkerblauw, Zwart, Donkergroen
+      if (toonPupillen) {
+        m.drawImage(imgPupil, x, y, w, h);
       }
 
       m.restore();
