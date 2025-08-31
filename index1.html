@@ -46,7 +46,7 @@
   </div>
 
   <script>
-  // Licht staat vast in het scherm, het rad draait via een hoekoffset
+  // Blendmodus check
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -55,7 +55,8 @@
     return ok;
   }
 
-  const opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
+  // Kleurenlijst
+  let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
     "lila":"#C8A2C8",
@@ -66,28 +67,48 @@
     "turquoise":"#40E0D0"
   };
   const metallicKleuren = new Set(["goud","zilver"]);
-  const donkereSegmenten = new Set([]); // zwarte segmenttekst
-  const lijnenWitKleuren = new Set([]); // bij dit palet nooit
-  const pupilKleuren = new Set([]);     // bij dit palet nooit
+
+  // Zorg dat goud en zilver geen buren zijn, inclusief de cirkel wrap
+  function scheidBuren(arr, a, b) {
+    const n = arr.length;
+    let ia = arr.indexOf(a);
+    let ib = arr.indexOf(b);
+    if (ia < 0 || ib < 0) return arr;
+    const zijnBuren = (x, y) => Math.abs(x - y) === 1 || Math.abs(x - y) === n - 1;
+    if (!zijnBuren(ia, ib)) return arr;
+    // verplaats b twee posities voorbij a
+    const [item] = arr.splice(ib, 1);
+    ia = arr.indexOf(a);
+    let insert = (ia + 2) % arr.length;
+    arr.splice(insert, 0, item);
+    return arr;
+  }
+  opties = scheidBuren(opties, "goud", "zilver");
+
+  // Segmenttekst overal zwart bij dit palet
+  const donkereSegmenten = new Set([]);
+  const lijnenWitKleuren = new Set([]); // geen witte lijnen in deze set
+  const pupilKleuren = new Set([]);     // geen extra pupillen in deze set
 
   // Spinner
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190; // rad links in canvas, rechts ruimte voor pijl
+  const CX = 220, CY = 200, R = 190; // rad links in canvas
   let hoek = 0, bezig = false, gekozen = opties[0];
 
+  // Metallic gloed in segment, licht staat vast aan het scherm
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
 
     rctx.save();
-    // clip tot huidige segmentvorm
+    // clip tot de segmentvorm
     rctx.beginPath();
     rctx.moveTo(CX, CY);
     rctx.arc(CX, CY, R, a0, a1);
     rctx.closePath();
     rctx.clip();
 
-    // diepteoverlay, licht van boven naar beneden in schermcoördinaten
+    // diepte overlay
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -116,10 +137,10 @@
     }
     rctx.restore();
 
-    // diagonale glansstrepen, getekend in schermcoördinaten
+    // diagonale glansstrepen in schermcoördinaten
     rctx.save();
     rctx.translate(CX, CY);
-    rctx.rotate(-Math.PI / 10);  // vaste lichtval
+    rctx.rotate(-Math.PI / 10);
     rctx.translate(-CX, -CY);
     rctx.globalAlpha = 0.55;
     for (let i = 0; i < 3; i++) {
@@ -133,8 +154,8 @@
     rctx.restore();
     rctx.globalAlpha = 1;
 
-    // highlights in screen
-    const rg = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
+    // highlights
+    const rg  = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
     rg.addColorStop(0.00, "rgba(255,255,255,1.00)");
     rg.addColorStop(0.35, "rgba(255,255,255,0.60)");
     rg.addColorStop(1.00, "rgba(255,255,255,0.00)");
@@ -146,32 +167,27 @@
     rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
-      rctx.fillStyle = rg;
-      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
-      rctx.fillStyle = rg2;
-      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+      rctx.fillStyle = rg;  rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+      rctx.fillStyle = rg2; rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalCompositeOperation = "source-over";
     } else {
       rctx.globalAlpha = 0.7;
-      rctx.fillStyle = rg;
-      rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
+      rctx.fillStyle = rg; rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalAlpha = 1;
     }
-    rctx.restore();
-
     rctx.restore();
   }
 
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
-    const rot = hoek * Math.PI / 180;     // hoekoffset, rad draait, licht blijft vast
+    const rot = hoek * Math.PI / 180; // rad draait, licht staat vast
 
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
       const a0 = i * stap + rot;
       const a1 = (i + 1) * stap + rot;
 
-      // basisvulling van het segment
+      // basisvulling
       rctx.beginPath();
       rctx.moveTo(CX, CY);
       rctx.arc(CX, CY, R, a0, a1);
@@ -179,7 +195,7 @@
       rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
-      // metallic gloed indien goud of zilver, in schermcoördinaten
+      // metallic gloed voor goud en zilver
       tekenMetallicInSegment(naam, a0, a1);
 
       // segmentlijn
@@ -187,7 +203,7 @@
       rctx.lineWidth = 2;
       rctx.stroke();
 
-      // label roteert mee met het segment
+      // label
       const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
       rctx.translate(CX, CY);
@@ -230,7 +246,6 @@
 
   function renderRad() {
     rctx.clearRect(0, 0, rad.width, rad.height);
-    // geen canvasrotatie meer, alles via hoekoffset in tekenSchijven
     tekenSchijven();
     tekenPijl();
   }
@@ -309,6 +324,7 @@
     m.restore();
   }
 
+  // lijnenWit, toonPupillen, metallicType: "goud" of "zilver" of null
   function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
     if (!assetsGereed) return;
 
@@ -431,9 +447,7 @@
 
   // init
   document.getElementById("draaiBtn").addEventListener("click", draai);
-  document.addEventListener("keydown", e => {
-    if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
-  });
+  document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.code === "Space") && !bezig) draai(); });
   renderRad();
   </script>
 </body>
