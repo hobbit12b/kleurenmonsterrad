@@ -9,7 +9,7 @@
     * { box-sizing: border-box; }
     body {
       display: grid;
-      grid-template-columns: 460px 520px;
+      grid-template-columns: 480px 520px;
       gap: 24px;
       justify-content: center;
       align-items: start;
@@ -20,8 +20,9 @@
     }
     .kolom { display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 20px; margin: 10px 0; }
+    /* iets bredere canvas voor pijl buiten het rad */
     canvas { background: var(--panel); border: 4px solid var(--fg); border-radius: 12px; }
-    #rad { border-radius: 50%; }
+    #rad { width: 440px; height: 400px; }
     button {
       margin-top: 12px; padding: 10px 20px; font-size: 16px;
       border: 0; border-radius: 12px; background: var(--fg); color: #fff; cursor: pointer;
@@ -34,7 +35,7 @@
 <body>
   <div class="kolom">
     <h1>Spinner</h1>
-    <canvas id="rad" width="400" height="400" aria-label="kleurenspin"></canvas>
+    <canvas id="rad" width="440" height="400" aria-label="kleurenspin"></canvas>
     <button id="draaiBtn" aria-describedby="resultaat">Draai</button>
     <div id="resultaat"></div>
     <div id="live" role="status" aria-live="polite"></div>
@@ -46,7 +47,7 @@
   </div>
 
   <script>
-    // Kleuren
+    // Kleuren en labels
     const opties = [
       "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw","Roze","Paars",
       "Rood","Lichtgroen","Donkergroen","Geel","Oranje"
@@ -56,11 +57,13 @@
       "Donkerblauw":"#1e3a8a","Roze":"#ff9acb","Paars":"#8b5cf6","Rood":"#ef4444",
       "Lichtgroen":"#86efac","Donkergroen":"#166534","Geel":"#fde047","Oranje":"#fb923c"
     };
+    const donkereKleuren = new Set(["Zwart","Donkerblauw","Donkergroen"]);
 
-    // Spinner
+    // Spinner variabelen
     const rad = document.getElementById("rad");
     const rctx = rad.getContext("2d");
-    const R = rad.width / 2;
+    // wiel staat gecentreerd op 200,200 met straal 190, extra ruimte rechts voor pijl
+    const CX = 200, CY = 200, R = 190;
     let hoek = 0, bezig = false, gekozen = "Wit";
 
     function tekenSchijven() {
@@ -68,18 +71,19 @@
       for (let i = 0; i < opties.length; i++) {
         const naam = opties[i];
         rctx.beginPath();
-        rctx.moveTo(R, R);
-        rctx.arc(R, R, R - 4, i * stap, (i + 1) * stap);
+        rctx.moveTo(CX, CY);
+        rctx.arc(CX, CY, R, i * stap, (i + 1) * stap);
         rctx.closePath();
         rctx.fillStyle = kleurMap[naam] || "#000";
         rctx.fill();
         rctx.strokeStyle = "#222";
+        rctx.lineWidth = 2;
         rctx.stroke();
 
         let tekstkleur = "#000";
-        if (naam === "Zwart" || naam === "Donkerblauw" || naam === "Donkergroen") tekstkleur = "#fff";
+        if (donkereKleuren.has(naam)) tekstkleur = "#fff";
         rctx.save();
-        rctx.translate(R, R);
+        rctx.translate(CX, CY);
         rctx.rotate(i * stap + stap / 2);
         rctx.textAlign = "right";
         rctx.fillStyle = tekstkleur;
@@ -87,35 +91,54 @@
         rctx.fillText(naam, R - 12, 6);
         rctx.restore();
       }
-    }
-    function tekenPijl() {
-      const tipX = rad.width - 8, tipY = R, baseX = rad.width - 42, halfH = 18;
+      // rand
+      rctx.lineWidth = 6;
+      rctx.strokeStyle = "#333";
       rctx.beginPath();
-      rctx.moveTo(tipX, tipY);
-      rctx.lineTo(baseX, tipY - halfH);
-      rctx.lineTo(baseX, tipY + halfH);
+      rctx.arc(CX, CY, R + 3, 0, Math.PI * 2);
+      rctx.stroke();
+    }
+
+    // pijl buiten het rad, aan de rechterzijde, horizontaal gespiegeld en wijzend naar links
+    function tekenPijl() {
+      const offset = 22;            // afstand buiten de cirkel
+      const tipX = CX + R + offset; // punt van de pijl rechts van de cirkel
+      const tipY = CY;
+      const baseX = tipX + 30;      // basis verder naar rechts
+      const halfH = 20;
+
+      rctx.beginPath();
+      rctx.moveTo(tipX, tipY);                 // punt
+      rctx.lineTo(baseX, tipY - halfH);        // bovenbasis
+      rctx.lineTo(baseX, tipY + halfH);        // onderbasis
       rctx.closePath();
       rctx.fillStyle = "#222";
       rctx.fill();
+
+      // klein lager rond asje in het midden van het wiel
       rctx.beginPath();
-      rctx.arc(R, R, 6, 0, Math.PI * 2);
+      rctx.arc(CX, CY, 6, 0, Math.PI * 2);
       rctx.fill();
     }
+
     function renderRad() {
       rctx.clearRect(0, 0, rad.width, rad.height);
       rctx.save();
-      rctx.translate(R, R);
+      rctx.translate(CX, CY);
       rctx.rotate(hoek * Math.PI / 180);
-      rctx.translate(-R, -R);
+      rctx.translate(-CX, -CY);
       tekenSchijven();
       rctx.restore();
-      tekenPijl();
+      tekenPijl(); // pijl blijft vast staan
     }
+
     function indexOnderPijl() {
       const n = opties.length, stap = 360 / n;
+      // pijl wijst naar het segment op drie uur, dus we nemen -hoek
       let a = (-hoek) % 360; if (a < 0) a += 360;
       return Math.floor(a / stap) % n;
     }
+
     function draai() {
       if (bezig) return;
       bezig = true;
@@ -133,13 +156,14 @@
           const idx = indexOnderPijl();
           gekozen = opties[idx];
           toonResultaat(gekozen);
-          kleurMonster(kleurMap[gekozen]);
+          kleurMonster(kleurMap[gekozen], donkereKleuren.has(gekozen));
           bezig = false;
           document.getElementById("draaiBtn").disabled = false;
         }
       }
       requestAnimationFrame(anim);
     }
+
     function toonResultaat(tekst) {
       document.getElementById("resultaat").textContent = `Gekozen kleur: ${tekst}`;
       document.getElementById("live").textContent = `Kleur ${tekst}`;
@@ -148,11 +172,8 @@
     // Monster met masker en lijnlaag
     const mCanvas = document.getElementById("monster");
     const m = mCanvas.getContext("2d");
-
-    const imgMask = new Image();
-    imgMask.src = "monster-mask.png";     // witte silhouette, transparante achtergrond
-    const imgLine = new Image();
-    imgLine.src = "monster-line.png";     // alleen lijnen, transparante achtergrond
+    const imgMask = new Image();  imgMask.src = "monster-mask.png";   // witte silhouette
+    const imgLine = new Image();  imgLine.src = "monster-line.png";   // alleen lijnen
 
     let assetsGereed = false;
     Promise.all([
@@ -161,7 +182,7 @@
     ]).then(() => {
       assetsGereed = true;
       tekenMonsterKader();
-      kleurMonster(kleurMap[gekozen]);
+      kleurMonster(kleurMap[gekozen], donkereKleuren.has(gekozen));
     });
 
     function tekenMonsterKader() {
@@ -176,12 +197,13 @@
       m.stroke();
       m.restore();
     }
-    function kleurMonster(hex) {
+
+    function kleurMonster(vulkleur, lijnenWit) {
       if (!assetsGereed) return;
 
       tekenMonsterKader();
 
-      // schaal het beeld proportioneel en centreer
+      // schalen en centreren
       const pad = 24;
       const doelW = mCanvas.width - pad * 2;
       const doelH = mCanvas.height - pad * 2;
@@ -193,10 +215,10 @@
 
       // 1. kleurvlak
       m.save();
-      m.fillStyle = hex;
+      m.fillStyle = vulkleur;
       m.fillRect(x, y, w, h);
 
-      // 2. masker toepassen op het kleurvlak
+      // 2. masker toepassen
       m.globalCompositeOperation = "destination-in";
       m.imageSmoothingEnabled = true;
       m.drawImage(imgMask, x, y, w, h);
@@ -204,8 +226,28 @@
       // 3. terug naar normale compositie
       m.globalCompositeOperation = "source-over";
 
-      // 4. lijnlaag erbovenop, zodat de originele look intact blijft
-      m.drawImage(imgLine, x, y, w, h);
+      // 4. lijnlaag, desgewenst wit getint
+      if (!lijnenWit) {
+        // gewoon de originele lijnen
+        m.drawImage(imgLine, x, y, w, h);
+      } else {
+        // tint de lijnen naar wit via een offscreen canvas
+        const off = document.createElement("canvas");
+        off.width = Math.max(1, Math.floor(w));
+        off.height = Math.max(1, Math.floor(h));
+        const o = off.getContext("2d");
+        o.imageSmoothingEnabled = true;
+
+        // vul met wit, dan maskeren met de lijn-alfakanaal
+        o.fillStyle = "#ffffff";
+        o.fillRect(0, 0, off.width, off.height);
+        o.globalCompositeOperation = "destination-in";
+        o.drawImage(imgLine, 0, 0, off.width, off.height);
+        o.globalCompositeOperation = "source-over";
+
+        // getinte lijnen tekenen
+        m.drawImage(off, x, y);
+      }
 
       m.restore();
     }
