@@ -75,8 +75,10 @@
   };
   const donkereSegmenten = new Set(["Zwart","Donkerblauw","Donkergroen"]); // witte segmenttekst
 
-  // bij Zwart wil je witte lijnen, verder zwarte lijnen
+  // lijnen wit bij Zwart, verder zwart
   function lijnenMoetenWit(naam) { return naam === "Zwart"; }
+  // pupillen tonen bij Zwart
+  function pupillenTonen(naam) { return naam === "Zwart"; }
 
   // ---------------- Spraak ----------------
   let nlVoice = null;
@@ -180,7 +182,7 @@
     rctx.fillStyle = "#222";
     rctx.fill();
 
-    // as-dopje
+    // as dopje
     rctx.beginPath();
     rctx.arc(CX, CY, 6, 0, Math.PI * 2);
     rctx.fill();
@@ -218,7 +220,8 @@
 
         toonResultaat(gekozen);
         const witteLijnen = lijnenMoetenWit(gekozen);
-        kleurMonster(kleurMap[gekozen], witteLijnen);
+        const toonPupillen = pupillenTonen(gekozen);
+        kleurMonster(kleurMap[gekozen], witteLijnen, toonPupillen);
 
         spreekKleur(gekozen);
 
@@ -237,17 +240,19 @@
   // ---------------- Monster ----------------
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
-  const imgMask  = new Image();  imgMask.src  = "monster-mask.png"; // witte silhouette
-  const imgLine  = new Image();  imgLine.src  = "monster-line.png"; // zwarte lijnen
+  const imgMask  = new Image();  imgMask.src  = "monster-mask.png";       // witte silhouette
+  const imgLine  = new Image();  imgLine.src  = "monster-line.png";       // zwarte lijnen
+  const imgPupil = new Image();  imgPupil.src = "monster-pupillen.png";   // pupillenlaag
 
   let assetsGereed = false;
   Promise.all([
     new Promise(res => imgMask.onload  = res),
-    new Promise(res => imgLine.onload  = res)
+    new Promise(res => imgLine.onload  = res),
+    new Promise(res => imgPupil.onload = res)
   ]).then(() => {
     assetsGereed = true;
     tekenMonsterKader();
-    kleurMonster(kleurMap[gekozen], lijnenMoetenWit(gekozen));
+    kleurMonster(kleurMap[gekozen], lijnenMoetenWit(gekozen), pupillenTonen(gekozen));
   });
 
   function tekenMonsterKader() {
@@ -263,8 +268,8 @@
     m.restore();
   }
 
-  // lijnenWit true geeft witte lijntekening, false geeft zwarte
-  function kleurMonster(vulkleur, lijnenWit) {
+  // lijnenWit true geeft witte lijntekening, toonPupillen true tekent pupillen erbovenop
+  function kleurMonster(vulkleur, lijnenWit, toonPupillen) {
     if (!assetsGereed) return;
 
     tekenMonsterKader();
@@ -304,6 +309,11 @@
       o.drawImage(imgLine, 0, 0, off.width, off.height);
       o.globalCompositeOperation = "source-over";
       m.drawImage(off, x, y);
+    }
+
+    // pupillen bovenop indien gevraagd
+    if (toonPupillen) {
+      m.drawImage(imgPupil, x, y, w, h);
     }
 
     m.restore();
