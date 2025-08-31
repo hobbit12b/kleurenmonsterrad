@@ -227,4 +227,115 @@
       const x = Math.round((mCanvas.width - w) / 2);
       const y = Math.round((mCanvas.height - h) / 2);
 
-      // vulling binnen
+      // vulling binnen het masker
+      m.save();
+      m.fillStyle = vulkleur;
+      m.fillRect(x, y, w, h);
+      m.globalCompositeOperation = "destination-in";
+      m.imageSmoothingEnabled = true;
+      m.drawImage(imgMask, x, y, w, h);
+      m.globalCompositeOperation = "source-over";
+
+      // metallic glans onder de lijnen
+      if (metallicType) voegMetaalGlansToe(metallicType, x, y, w, h);
+
+      // lijnen
+      if (!lijnenWit) {
+        m.drawImage(imgLine, x, y, w, h);
+      } else {
+        const off = document.createElement("canvas");
+        off.width = w; off.height = h;
+        const o = off.getContext("2d");
+        o.imageSmoothingEnabled = true;
+        o.fillStyle = "#ffffff";
+        o.fillRect(0, 0, off.width, off.height);
+        o.globalCompositeOperation = "destination-in";
+        o.drawImage(imgLine, 0, 0, off.width, off.height);
+        o.globalCompositeOperation = "source-over";
+        m.drawImage(off, x, y);
+      }
+
+      if (toonPupillen) m.drawImage(imgPupil, x, y, w, h);
+      m.restore();
+    }
+
+    function voegMetaalGlansToe(type, x, y, w, h) {
+      // diepte in overlay
+      const overlay = document.createElement("canvas");
+      overlay.width = w; overlay.height = h;
+      const o = overlay.getContext("2d");
+      const lg = o.createLinearGradient(0, 0, 0, h);
+      if (type === "goud") {
+        lg.addColorStop(0.00, "rgba(255,245,200,0.55)");
+        lg.addColorStop(0.40, "rgba(255,255,255,0.15)");
+        lg.addColorStop(0.60, "rgba(0,0,0,0.28)");
+        lg.addColorStop(1.00, "rgba(120,90,0,0.22)");
+      } else {
+        lg.addColorStop(0.00, "rgba(255,255,255,0.55)");
+        lg.addColorStop(0.50, "rgba(0,0,0,0.28)");
+        lg.addColorStop(1.00, "rgba(230,230,230,0.30)");
+      }
+      o.fillStyle = lg;
+      o.fillRect(0, 0, w, h);
+      o.globalCompositeOperation = "destination-in";
+      o.drawImage(imgMask, 0, 0, w, h);
+      o.globalCompositeOperation = "source-over";
+      m.save();
+      m.globalCompositeOperation = "overlay";
+      m.drawImage(overlay, x, y);
+      m.globalCompositeOperation = "source-over";
+      m.restore();
+
+      // speculaire highlight in screen
+      const spec = document.createElement("canvas");
+      spec.width = w; spec.height = h;
+      const s = spec.getContext("2d");
+      const rg = s.createRadialGradient(w * 0.30, h * 0.25, 0, w * 0.30, h * 0.25, Math.max(w, h) * 0.55);
+      rg.addColorStop(0.00, "rgba(255,255,255,0.95)");
+      rg.addColorStop(0.30, "rgba(255,255,255,0.50)");
+      rg.addColorStop(1.00, "rgba(255,255,255,0.00)");
+      s.fillStyle = rg;
+      s.fillRect(0, 0, w, h);
+      s.save();
+      s.globalAlpha = 0.65;
+      s.translate(w * 0.12, h * 0.18);
+      s.rotate(-Math.PI / 10);
+      const strip = s.createLinearGradient(0, 0, w * 0.9, 0);
+      strip.addColorStop(0.00, "rgba(255,255,255,0)");
+      strip.addColorStop(0.55, "rgba(255,255,255,1)");
+      strip.addColorStop(1.00, "rgba(255,255,255,0)");
+      s.fillStyle = strip;
+      s.fillRect(0, 0, w * 0.9, h * 0.10);
+      s.restore();
+      s.globalCompositeOperation = "destination-in";
+      s.drawImage(imgMask, 0, 0, w, h);
+      s.globalCompositeOperation = "source-over";
+      m.save();
+      m.globalCompositeOperation = "screen";
+      m.drawImage(spec, x, y);
+      m.globalCompositeOperation = "source-over";
+      m.restore();
+    }
+
+    function rondeRechthoek(ctx, x, y, w, h, r) {
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+    }
+
+    // init, na DOM is alles gereed
+    document.getElementById("draaiBtn").addEventListener("click", draai);
+    document.addEventListener("keydown", e => {
+      if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
+    });
+    renderRad();
+  })();
+  </script>
+</body>
+</html>
