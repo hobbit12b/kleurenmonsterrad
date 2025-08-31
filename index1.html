@@ -54,7 +54,7 @@
   </div>
 
   <script>
-  // ---------- blendmodus check ----------
+  // hulpfunctie voor blendmodus
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -63,7 +63,7 @@
     return ok;
   }
 
-  // ---------- spraak, turquoise als één utterance ----------
+  // spraak, turquoise als thurkwáazùh met NL stem
   let nlVoice = null;
   function pickVoices() {
     try {
@@ -75,13 +75,13 @@
     pickVoices();
     speechSynthesis.onvoiceschanged = pickVoices;
   }
-  function spreekEenmaal(text) {
+  function spreekEenmaal(text, rate = 1.0) {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       if (nlVoice) u.voice = nlVoice;
       u.lang = nlVoice?.lang || "nl-NL";
-      u.rate = 1.0;   // desgewenst 0.95 voor nog net iets ronder
+      u.rate = rate;
       u.pitch = 1.0;
       u.volume = 1.0;
       speechSynthesis.speak(u);
@@ -93,14 +93,14 @@
     const key = String(naam || "").toLowerCase().trim();
 
     if (key === "turquoise") {
-      // geen pauzes meer tussen delen
-      spreekEenmaal("tuhr kwa zuh");
+      // accenten sturen de klank in de NL stem
+      spreekEenmaal("thurkwáazùh", 0.98);
       return;
     }
-    spreekEenmaal(naam);
+    spreekEenmaal(naam, 1.0);
   }
 
-  // ---------- kleuren en labels ----------
+  // kleuren en labels
   let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
@@ -113,7 +113,7 @@
   };
   const metallicKleuren = new Set(["goud","zilver"]);
 
-  // goud en zilver niet naast elkaar
+  // goud en zilver niet als buren
   function scheidBuren(arr, a, b) {
     const n = arr.length;
     let ia = arr.indexOf(a), ib = arr.indexOf(b);
@@ -128,17 +128,17 @@
   }
   opties = scheidBuren(opties, "goud", "zilver");
 
-  const donkereSegmenten = new Set([]); // segmenttekst zwart
-  const lijnenWitKleuren = new Set([]); // niet nodig bij dit palet
-  const pupilKleuren = new Set([]);     // niet nodig bij dit palet
+  const donkereSegmenten = new Set([]);
+  const lijnenWitKleuren = new Set([]);
+  const pupilKleuren = new Set([]);
 
-  // ---------- spinner ----------
+  // spinner
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190; // rad links, pijl rechts
+  const CX = 220, CY = 200, R = 190;
   let hoek = 0, bezig = false, gekozen = opties[0];
 
-  // zorg dat elke boog end >= start
+  // maak endhoek altijd groter of gelijk
   function normBoog(a0, a1) {
     const tau = Math.PI * 2;
     let s = a0, e = a1;
@@ -146,7 +146,7 @@
     return [s, e];
   }
 
-  // metallic gloed in segment, licht vast in schermcoördinaten
+  // metallic gloed in segment, licht staat vast in het scherm
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
     const [s, e] = normBoog(a0, a1);
@@ -170,7 +170,6 @@
       overlayGrad.addColorStop(1.00, "rgba(235,235,235,0.32)");
     }
 
-    rctx.save();
     if (supportMode(rctx, "overlay")) {
       rctx.globalCompositeOperation = "overlay";
       rctx.fillStyle = overlayGrad;
@@ -185,7 +184,6 @@
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalCompositeOperation = "source-over";
     }
-    rctx.restore();
 
     // glansstrepen
     rctx.save();
@@ -205,7 +203,6 @@
     rctx.globalAlpha = 1;
 
     // highlights
-    rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
       const rg = rctx.createRadialGradient(CX - R * 0.30, CY - R * 0.35, 0, CX - R * 0.30, CY - R * 0.35, R * 0.9);
@@ -233,7 +230,6 @@
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
       rctx.globalAlpha = 1;
     }
-    rctx.restore();
 
     rctx.restore();
   }
@@ -241,6 +237,7 @@
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
     const rot = hoek * Math.PI / 180;
+
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
       const [s, e] = normBoog(i * stap + rot, (i + 1) * stap + rot);
@@ -277,6 +274,7 @@
     rctx.stroke();
   }
 
+  // pijl buiten het rad, rechts, wijst naar links
   function tekenPijl() {
     const offset = 22;
     const tipX = CX + R + offset;
@@ -348,7 +346,7 @@
     document.getElementById("live").textContent = `Kleur ${tekst}`;
   }
 
-  // ---------- monster ----------
+  // monster
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
   const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
