@@ -29,6 +29,8 @@
     button[disabled] { opacity: .6; cursor: not-allowed; }
     #resultaat { margin-top: 10px; font-size: 18px; font-weight: 700; min-height: 1.5em; }
     #live { position: absolute; left: -9999px; }
+    .rij { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+    .rij label { font-size: 14px; user-select: none; }
   </style>
 </head>
 <body>
@@ -37,6 +39,12 @@
     <canvas id="rad" width="500" height="400" aria-label="kleurenspin"></canvas>
     <button id="draaiBtn" aria-describedby="resultaat">Draai</button>
     <div id="resultaat"></div>
+    <div class="rij">
+      <label>
+        <input type="checkbox" id="spreekToggle" checked />
+        Kleur uitspreken
+      </label>
+    </div>
     <div id="live" role="status" aria-live="polite"></div>
   </div>
 
@@ -55,6 +63,34 @@
     return ok;
   }
 
+  // Web Speech, kies een NL stem
+  let nlVoice = null;
+  function pickDutchVoice() {
+    try {
+      const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+      nlVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith("nl")) || null;
+    } catch { nlVoice = null; }
+  }
+  if ("speechSynthesis" in window) {
+    pickDutchVoice();
+    speechSynthesis.onvoiceschanged = pickDutchVoice;
+  }
+  function spreekKleur(naam) {
+    const aan = document.getElementById("spreekToggle")?.checked;
+    if (!aan) return;
+    if (!("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(naam);
+      if (nlVoice) u.voice = nlVoice;
+      u.lang = nlVoice?.lang || "nl-NL";
+      u.rate = 1;
+      u.pitch = 1;
+      u.volume = 1;
+      speechSynthesis.speak(u);
+    } catch { /* stil falen, geen blokkade van de UI */ }
+  }
+
   // Kleuren
   let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
@@ -68,7 +104,7 @@
   };
   const metallicKleuren = new Set(["goud","zilver"]);
 
-  // Optioneel, zorg dat goud en zilver geen buren zijn
+  // Zorg dat goud en zilver geen buren zijn
   function scheidBuren(arr, a, b) {
     const n = arr.length;
     let ia = arr.indexOf(a), ib = arr.indexOf(b);
@@ -93,7 +129,7 @@
   const CX = 220, CY = 200, R = 190; // rad links, ruimte rechts voor pijl
   let hoek = 0, bezig = false, gekozen = opties[0];
 
-  // Normaliseer bogen, maak end altijd groter of gelijk aan start
+  // Normaliseer bogen, eindhoek altijd groter of gelijk
   function normBoog(a0, a1) {
     const tau = Math.PI * 2;
     let s = a0, e = a1;
@@ -101,21 +137,18 @@
     return [s, e];
   }
 
-  // Metallic gloed in segment, licht staat vast aan het scherm
+  // Metallic gloed in segment, licht vast aan het scherm
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
-
     const [s, e] = normBoog(a0, a1);
 
     rctx.save();
-    // clip tot segmentvorm
     rctx.beginPath();
     rctx.moveTo(CX, CY);
     rctx.arc(CX, CY, R, s, e, false);
     rctx.closePath();
     rctx.clip();
 
-    // diepte overlay in schermcoördinaten
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -144,7 +177,6 @@
     }
     rctx.restore();
 
-    // diagonale glansstrepen
     rctx.save();
     rctx.translate(CX, CY);
     rctx.rotate(-Math.PI / 10);
@@ -161,7 +193,6 @@
     rctx.restore();
     rctx.globalAlpha = 1;
 
-    // highlights
     rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
@@ -178,7 +209,6 @@
       rg2.addColorStop(1.00, "rgba(255,255,255,0.00)");
       rctx.fillStyle = rg2;
       rctx.fillRect(CX - R, CY - R, R * 2, R * 2);
-
       rctx.globalCompositeOperation = "source-over";
     } else {
       rctx.globalAlpha = 0.7;
@@ -197,7 +227,7 @@
 
   function tekenSchijven() {
     const stap = 2 * Math.PI / opties.length;
-    const rot = hoek * Math.PI / 180; // rad draait via offset
+    const rot = hoek * Math.PI / 180;
 
     for (let i = 0; i < opties.length; i++) {
       const naam = opties[i];
@@ -205,7 +235,6 @@
       let a1 = (i + 1) * stap + rot;
       const [s, e] = normBoog(a0, a1);
 
-      // basisvulling
       rctx.beginPath();
       rctx.moveTo(CX, CY);
       rctx.arc(CX, CY, R, s, e, false);
@@ -213,15 +242,12 @@
       rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
-      // metallic gloed voor goud en zilver
       tekenMetallicInSegment(naam, s, e);
 
-      // segmentlijn
       rctx.strokeStyle = "#222";
       rctx.lineWidth = 2;
       rctx.stroke();
 
-      // label
       const mid = s + (e - s) / 2;
       const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
@@ -234,7 +260,6 @@
       rctx.restore();
     }
 
-    // buitenrand
     rctx.lineWidth = 6;
     rctx.strokeStyle = "#333";
     rctx.beginPath();
@@ -300,6 +325,9 @@
         toonResultaat(gekozen);
         kleurMonster(kleurMap[gekozen], lijnenWit, toonPupillen, metallicType);
 
+        // spreek de kleur
+        spreekKleur(gekozen);
+
         bezig = false;
         document.getElementById("draaiBtn").disabled = false;
       }
@@ -343,7 +371,6 @@
     m.restore();
   }
 
-  // lijnenWit, toonPupillen, metallicType
   function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
     if (!assetsGereed) return;
 
