@@ -9,7 +9,7 @@
     * { box-sizing: border-box; }
     body {
       display: grid;
-      grid-template-columns: 480px 520px;
+      grid-template-columns: 520px 520px;
       gap: 24px;
       justify-content: center;
       align-items: start;
@@ -21,7 +21,7 @@
     .kolom { display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 20px; margin: 10px 0; }
     canvas { background: var(--panel); border: 4px solid var(--fg); border-radius: 12px; }
-    #rad { width: 440px; height: 400px; }
+    #rad { width: 500px; height: 400px; }
     button {
       margin-top: 12px; padding: 10px 20px; font-size: 16px;
       border: 0; border-radius: 12px; background: var(--fg); color: #fff; cursor: pointer;
@@ -29,14 +29,22 @@
     button[disabled] { opacity: .6; cursor: not-allowed; }
     #resultaat { margin-top: 10px; font-size: 18px; font-weight: 700; min-height: 1.5em; }
     #live { position: absolute; left: -9999px; }
+    .rij { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+    .rij label { font-size: 14px; user-select: none; }
   </style>
 </head>
 <body>
   <div class="kolom">
     <h1>Spinner</h1>
-    <canvas id="rad" width="440" height="400" aria-label="kleurenspin"></canvas>
+    <canvas id="rad" width="500" height="400" aria-label="kleurenspin"></canvas>
     <button id="draaiBtn" aria-describedby="resultaat">Draai</button>
     <div id="resultaat"></div>
+    <div class="rij">
+      <label>
+        <input type="checkbox" id="spreekToggle" checked />
+        Kleur uitspreken
+      </label>
+    </div>
     <div id="live" role="status" aria-live="polite"></div>
   </div>
 
@@ -46,115 +54,279 @@
   </div>
 
   <script>
-    // Kleuren en labels
-    const opties = [
-      "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw","Roze","Paars",
-      "Rood","Lichtgroen","Donkergroen","Geel","Oranje"
-    ];
-    const kleurMap = {
-      "Wit":"#ffffff","Grijs":"#bdbdbd","Zwart":"#000000","Lichtblauw":"#87cefa",
-      "Donkerblauw":"#1e3a8a","Roze":"#ff9acb","Paars":"#8b5cf6","Rood":"#ef4444",
-      "Lichtgroen":"#86efac","Donkergroen":"#166534","Geel":"#fde047","Oranje":"#fb923c"
-    };
+  // ---------------- Config ----------------
+  const opties = [
+    "Wit","Grijs","Zwart","Lichtblauw","Donkerblauw","Roze","Paars",
+    "Rood","Lichtgroen","Donkergroen","Geel","Oranje"
+  ];
+  const kleurMap = {
+    "Wit":"#ffffff",
+    "Grijs":"#bdbdbd",
+    "Zwart":"#000000",
+    "Lichtblauw":"#87cefa",
+    "Donkerblauw":"#1e3a8a",
+    "Roze":"#ff9acb",
+    "Paars":"#8b5cf6",
+    "Rood":"#ef4444",
+    "Lichtgroen":"#86efac",
+    "Donkergroen":"#166534",
+    "Geel":"#fde047",
+    "Oranje":"#fb923c"
+  };
+  const donkereSegmenten = new Set(["Zwart","Donkerblauw","Donkergroen"]); // witte segmenttekst
 
-    // Donkere segmenten voor witte segmenttekst
-    const donkereSegmenten = new Set(["Zwart","Donkerblauw","Donkergroen"]);
-    // Alleen bij Zwart worden lijnen wit
-    const lijnenWitKleuren = new Set(["Zwart"]);
-    // Pupillen bij deze drie
-    const pupilKleuren = new Set(["Zwart","Donkerblauw","Donkergroen"]);
+  // bij Zwart wil je witte lijnen, verder zwarte lijnen
+  function lijnenMoetenWit(naam) { return naam === "Zwart"; }
 
-    // Spinner
-    const rad = document.getElementById("rad");
-    const rctx = rad.getContext("2d");
-    const CX = 200, CY = 200, R = 190;  // wielpositie met ruimte rechts voor de pijl
-    let hoek = 0, bezig = false, gekozen = "Wit";
+  // ---------------- Spraak ----------------
+  let nlVoice = null;
+  function pickVoices() {
+    try {
+      const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+      nlVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith("nl")) || null;
+    } catch { nlVoice = null; }
+  }
+  if ("speechSynthesis" in window) {
+    pickVoices();
+    speechSynthesis.onvoiceschanged = pickVoices;
+  }
+  function spreekEenmaal(text, rate = 1.0) {
+    if (!("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (nlVoice) u.voice = nlVoice;
+      u.lang = nlVoice?.lang || "nl-NL";
+      u.rate = rate;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      speechSynthesis.speak(u);
+    } catch {}
+  }
+  function spreekKleur(naam) {
+    const aan = document.getElementById("spreekToggle")?.checked;
+    if (!aan) return;
+    spreekEenmaal(naam, 1.0);
+  }
 
-    function tekenSchijven() {
-      const stap = 2 * Math.PI / opties.length;
-      for (let i = 0; i < opties.length; i++) {
-        const naam = opties[i];
-        rctx.beginPath();
-        rctx.moveTo(CX, CY);
-        rctx.arc(CX, CY, R, i * stap, (i + 1) * stap);
-        rctx.closePath();
-        rctx.fillStyle = kleurMap[naam] || "#000";
-        rctx.fill();
-        rctx.strokeStyle = "#222";
-        rctx.lineWidth = 2;
-        rctx.stroke();
+  // ---------------- Spinner ----------------
+  const rad = document.getElementById("rad");
+  const rctx = rad.getContext("2d");
+  const CX = 220, CY = 200, R = 190; // rad links, pijl rechts
+  let hoek = 0, bezig = false, gekozen = opties[0];
 
-        let tekstkleur = "#000";
-        if (donkereSegmenten.has(naam)) tekstkleur = "#fff";
-        rctx.save();
-        rctx.translate(CX, CY);
-        rctx.rotate(i * stap + stap / 2);
-        rctx.textAlign = "right";
-        rctx.fillStyle = tekstkleur;
-        rctx.font = "16px system-ui, Arial";
-        rctx.fillText(naam, R - 12, 6);
-        rctx.restore();
-      }
-      rctx.lineWidth = 6;
-      rctx.strokeStyle = "#333";
+  function normBoog(a0, a1) {
+    const tau = Math.PI * 2;
+    let s = a0, e = a1;
+    while (e < s) e += tau;
+    return [s, e];
+  }
+
+  function tekenSchijven() {
+    const stap = 2 * Math.PI / opties.length;
+    const rot = hoek * Math.PI / 180;
+
+    for (let i = 0; i < opties.length; i++) {
+      const naam = opties[i];
+      const [s, e] = normBoog(i * stap + rot, (i + 1) * stap + rot);
+
+      // segment
       rctx.beginPath();
-      rctx.arc(CX, CY, R + 3, 0, Math.PI * 2);
-      rctx.stroke();
-    }
-
-    // Pijl buiten het rad, rechts, wijst naar links
-    function tekenPijl() {
-      const offset = 22;
-      const tipX = CX + R + offset;
-      const tipY = CY;
-      const baseX = tipX + 30;
-      const halfH = 20;
-
-      rctx.beginPath();
-      rctx.moveTo(tipX, tipY);
-      rctx.lineTo(baseX, tipY - halfH);
-      rctx.lineTo(baseX, tipY + halfH);
+      rctx.moveTo(CX, CY);
+      rctx.arc(CX, CY, R, s, e, false);
       rctx.closePath();
-      rctx.fillStyle = "#222";
+      rctx.fillStyle = kleurMap[naam] || "#000";
       rctx.fill();
 
-      rctx.beginPath();
-      rctx.arc(CX, CY, 6, 0, Math.PI * 2);
-      rctx.fill();
-    }
+      // segment rand
+      rctx.strokeStyle = "#222";
+      rctx.lineWidth = 2;
+      rctx.stroke();
 
-    function renderRad() {
-      rctx.clearRect(0, 0, rad.width, rad.height);
+      // label
+      const mid = s + (e - s) / 2;
+      const tekstkleur = donkereSegmenten.has(naam) ? "#fff" : "#000";
       rctx.save();
       rctx.translate(CX, CY);
-      rctx.rotate(hoek * Math.PI / 180);
-      rctx.translate(-CX, -CY);
-      tekenSchijven();
+      rctx.rotate(mid);
+      rctx.textAlign = "right";
+      rctx.fillStyle = tekstkleur;
+      rctx.font = "16px system-ui, Arial";
+      rctx.fillText(naam, R - 12, 6);
       rctx.restore();
-      tekenPijl();
     }
 
-    function indexOnderPijl() {
-      const n = opties.length, stap = 360 / n;
-      let a = (-hoek) % 360; if (a < 0) a += 360;
-      return Math.floor(a / stap) % n;
-    }
+    // buitenring
+    rctx.lineWidth = 6;
+    rctx.strokeStyle = "#333";
+    rctx.beginPath();
+    rctx.arc(CX, CY, R + 3, 0, Math.PI * 2);
+    rctx.stroke();
+  }
 
-    function draai() {
-      if (bezig) return;
-      bezig = true;
-      document.getElementById("draaiBtn").disabled = true;
-      let snelheid = 20 + Math.random() * 15;
-      hoek += 360 * 4;
-      function anim() {
-        snelheid *= 0.985;
-        hoek += snelheid;
+  // pijl buiten het rad, rechts, wijst naar links
+  function tekenPijl() {
+    const offset = 22;
+    const tipX = CX + R + offset;
+    const tipY = CY;
+    const baseX = tipX + 34;
+    const halfH = 22;
+
+    rctx.beginPath();
+    rctx.moveTo(tipX, tipY);
+    rctx.lineTo(baseX, tipY - halfH);
+    rctx.lineTo(baseX, tipY + halfH);
+    rctx.closePath();
+    rctx.fillStyle = "#222";
+    rctx.fill();
+
+    // as-dopje
+    rctx.beginPath();
+    rctx.arc(CX, CY, 6, 0, Math.PI * 2);
+    rctx.fill();
+  }
+
+  function renderRad() {
+    rctx.clearRect(0, 0, rad.width, rad.height);
+    tekenSchijven();
+    tekenPijl();
+  }
+
+  function indexOnderPijl() {
+    const n = opties.length, stap = 360 / n;
+    let a = (-hoek) % 360; if (a < 0) a += 360;
+    return Math.floor(a / stap) % n;
+  }
+
+  function draai() {
+    if (bezig) return;
+    bezig = true;
+    document.getElementById("draaiBtn").disabled = true;
+    let snelheid = 20 + Math.random() * 15;
+    hoek += 360 * 4;
+
+    function anim() {
+      snelheid *= 0.985;
+      hoek += snelheid;
+      renderRad();
+      if (snelheid > 0.25) requestAnimationFrame(anim);
+      else {
+        hoek = hoek % 360;
         renderRad();
-        if (snelheid > 0.25) requestAnimationFrame(anim);
-        else {
-          hoek = hoek % 360;
-          renderRad();
-          const idx = indexOnderPijl();
-          gekozen = opties[idx];
+        const idx = indexOnderPijl();
+        gekozen = opties[idx];
 
-          cons
+        toonResultaat(gekozen);
+        const witteLijnen = lijnenMoetenWit(gekozen);
+        kleurMonster(kleurMap[gekozen], witteLijnen);
+
+        spreekKleur(gekozen);
+
+        bezig = false;
+        document.getElementById("draaiBtn").disabled = false;
+      }
+    }
+    requestAnimationFrame(anim);
+  }
+
+  function toonResultaat(tekst) {
+    document.getElementById("resultaat").textContent = `Gekozen kleur: ${tekst}`;
+    document.getElementById("live").textContent = `Kleur ${tekst}`;
+  }
+
+  // ---------------- Monster ----------------
+  const mCanvas = document.getElementById("monster");
+  const m = mCanvas.getContext("2d");
+  const imgMask  = new Image();  imgMask.src  = "monster-mask.png"; // witte silhouette
+  const imgLine  = new Image();  imgLine.src  = "monster-line.png"; // zwarte lijnen
+
+  let assetsGereed = false;
+  Promise.all([
+    new Promise(res => imgMask.onload  = res),
+    new Promise(res => imgLine.onload  = res)
+  ]).then(() => {
+    assetsGereed = true;
+    tekenMonsterKader();
+    kleurMonster(kleurMap[gekozen], lijnenMoetenWit(gekozen));
+  });
+
+  function tekenMonsterKader() {
+    m.clearRect(0, 0, mCanvas.width, mCanvas.height);
+    m.save();
+    m.lineWidth = 6;
+    m.strokeStyle = "#222";
+    m.fillStyle = "#fff";
+    m.beginPath();
+    rondeRechthoek(m, 12, 12, mCanvas.width - 24, mCanvas.height - 24, 18);
+    m.fill();
+    m.stroke();
+    m.restore();
+  }
+
+  // lijnenWit true geeft witte lijntekening, false geeft zwarte
+  function kleurMonster(vulkleur, lijnenWit) {
+    if (!assetsGereed) return;
+
+    tekenMonsterKader();
+
+    // schalen en centreren
+    const pad = 24;
+    const doelW = mCanvas.width - pad * 2;
+    const doelH = mCanvas.height - pad * 2;
+    const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
+    const w = Math.max(1, Math.round(imgMask.width * ratio));
+    const h = Math.max(1, Math.round(imgMask.height * ratio));
+    const x = Math.round((mCanvas.width - w) / 2);
+    const y = Math.round((mCanvas.height - h) / 2);
+
+    // vulling binnen het masker
+    m.save();
+    m.fillStyle = vulkleur;
+    m.fillRect(x, y, w, h);
+    m.globalCompositeOperation = "destination-in";
+    m.imageSmoothingEnabled = true;
+    m.drawImage(imgMask, x, y, w, h);
+    m.globalCompositeOperation = "source-over";
+
+    // lijnenlaag
+    if (!lijnenWit) {
+      // originele zwarte lijnen
+      m.drawImage(imgLine, x, y, w, h);
+    } else {
+      // naar wit getint via offscreen canvas
+      const off = document.createElement("canvas");
+      off.width = w; off.height = h;
+      const o = off.getContext("2d");
+      o.imageSmoothingEnabled = true;
+      o.fillStyle = "#ffffff";
+      o.fillRect(0, 0, off.width, off.height);
+      o.globalCompositeOperation = "destination-in";
+      o.drawImage(imgLine, 0, 0, off.width, off.height);
+      o.globalCompositeOperation = "source-over";
+      m.drawImage(off, x, y);
+    }
+
+    m.restore();
+  }
+
+  function rondeRechthoek(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
+  // init
+  document.getElementById("draaiBtn").addEventListener("click", draai);
+  document.addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.code === "Space") && !bezig) draai();
+  });
+  renderRad();
+  </script>
+</body>
+</html>
