@@ -63,7 +63,7 @@
     return ok;
   }
 
-  // ---------- spraak, turquoise als syllaben in NL stem ----------
+  // ---------- spraak, turquoise als één utterance ----------
   let nlVoice = null;
   function pickVoices() {
     try {
@@ -75,44 +75,29 @@
     pickVoices();
     speechSynthesis.onvoiceschanged = pickVoices;
   }
-  // spreek losse delen na elkaar, kleine pauzes via onend
-  function speakParts(parts) {
-    if (!("speechSynthesis" in window)) return;
-    const queue = parts.slice();
-    try { speechSynthesis.cancel(); } catch {}
-    function next() {
-      if (!queue.length) return;
-      const u = new SpeechSynthesisUtterance(queue.shift());
+  function spreekEenmaal(text) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
       if (nlVoice) u.voice = nlVoice;
       u.lang = nlVoice?.lang || "nl-NL";
-      u.rate = 0.98;
-      u.pitch = 1;
-      u.volume = 1;
-      u.onend = next;
+      u.rate = 1.0;   // desgewenst 0.95 voor nog net iets ronder
+      u.pitch = 1.0;
+      u.volume = 1.0;
       speechSynthesis.speak(u);
-    }
-    next();
+    } catch { /* stil falen */ }
   }
   function spreekKleur(naam) {
     const aan = document.getElementById("spreekToggle")?.checked;
     if (!aan || !("speechSynthesis" in window)) return;
     const key = String(naam || "").toLowerCase().trim();
 
-    // turquoise als tuhr, kwa, zuh in NL stem en in kleine letters
     if (key === "turquoise") {
-      speakParts(["tuhr", "kwa", "zuh"]);
+      // geen pauzes meer tussen delen
+      spreekEenmaal("tuhr kwa zuh");
       return;
     }
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(naam);
-      if (nlVoice) u.voice = nlVoice;
-      u.lang = nlVoice?.lang || "nl-NL";
-      u.rate = 1;
-      u.pitch = 1;
-      u.volume = 1;
-      speechSynthesis.speak(u);
-    } catch { /* stil falen */ }
+    spreekEenmaal(naam);
   }
 
   // ---------- kleuren en labels ----------
