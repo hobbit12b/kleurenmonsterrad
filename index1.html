@@ -54,7 +54,7 @@
   </div>
 
   <script>
-  // blendmodus check
+  // ---------- blendmodus check ----------
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -63,32 +63,31 @@
     return ok;
   }
 
-  // spraak, vaste uitspraak voor turquoise met syllaben
-  let nlVoice = null, enVoice = null;
+  // ---------- spraak, turquoise als syllaben in NL stem ----------
+  let nlVoice = null;
   function pickVoices() {
     try {
       const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
       nlVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith("nl")) || null;
-      enVoice = voices.find(v => v.lang && /^en-(gb|us)/i.test(v.lang))
-             || voices.find(v => v.lang && v.lang.toLowerCase().startsWith("en"))
-             || null;
-    } catch { nlVoice = null; enVoice = null; }
+    } catch { nlVoice = null; }
   }
   if ("speechSynthesis" in window) {
     pickVoices();
     speechSynthesis.onvoiceschanged = pickVoices;
   }
-  function speakParts(parts, voice, lang) {
+  // spreek losse delen na elkaar, kleine pauzes via onend
+  function speakParts(parts) {
     if (!("speechSynthesis" in window)) return;
     const queue = parts.slice();
     try { speechSynthesis.cancel(); } catch {}
-    const rate = 0.95, pitch = 1, volume = 1;
     function next() {
       if (!queue.length) return;
       const u = new SpeechSynthesisUtterance(queue.shift());
-      if (voice) u.voice = voice;
-      u.lang = lang || voice?.lang || "nl-NL";
-      u.rate = rate; u.pitch = pitch; u.volume = volume;
+      if (nlVoice) u.voice = nlVoice;
+      u.lang = nlVoice?.lang || "nl-NL";
+      u.rate = 0.98;
+      u.pitch = 1;
+      u.volume = 1;
       u.onend = next;
       speechSynthesis.speak(u);
     }
@@ -98,10 +97,10 @@
     const aan = document.getElementById("spreekToggle")?.checked;
     if (!aan || !("speechSynthesis" in window)) return;
     const key = String(naam || "").toLowerCase().trim();
+
+    // turquoise als tuhr, kwa, zuh in NL stem en in kleine letters
     if (key === "turquoise") {
-      const v = enVoice || nlVoice || null;
-      const lang = enVoice ? enVoice.lang : (nlVoice ? nlVoice.lang : "nl-NL");
-      speakParts(["tuhr", "KWA", "zuh"], v, lang);
+      speakParts(["tuhr", "kwa", "zuh"]);
       return;
     }
     try {
@@ -109,12 +108,14 @@
       const u = new SpeechSynthesisUtterance(naam);
       if (nlVoice) u.voice = nlVoice;
       u.lang = nlVoice?.lang || "nl-NL";
-      u.rate = 1; u.pitch = 1; u.volume = 1;
+      u.rate = 1;
+      u.pitch = 1;
+      u.volume = 1;
       speechSynthesis.speak(u);
     } catch { /* stil falen */ }
   }
 
-  // kleuren en labels
+  // ---------- kleuren en labels ----------
   let opties = ["zalm roze","lila","beige","wit","zilver","goud","turquoise"];
   const kleurMap = {
     "zalm roze":"#FFA07A",
@@ -140,19 +141,19 @@
     arr.splice(insert, 0, item);
     return arr;
   }
-  opties = scheidBuren(opjes = opties, "goud", "zilver"); // typo guard, laat opties intact als fout
-  opties = scheidBuren(opjes || opties, "goud", "zilver");
+  opties = scheidBuren(opties, "goud", "zilver");
 
-  const donkereSegmenten = new Set([]);
-  const lijnenWitKleuren = new Set([]);
-  const pupilKleuren = new Set([]);
+  const donkereSegmenten = new Set([]); // segmenttekst zwart
+  const lijnenWitKleuren = new Set([]); // niet nodig bij dit palet
+  const pupilKleuren = new Set([]);     // niet nodig bij dit palet
 
-  // spinner
+  // ---------- spinner ----------
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
-  const CX = 220, CY = 200, R = 190;
+  const CX = 220, CY = 200, R = 190; // rad links, pijl rechts
   let hoek = 0, bezig = false, gekozen = opties[0];
 
+  // zorg dat elke boog end >= start
   function normBoog(a0, a1) {
     const tau = Math.PI * 2;
     let s = a0, e = a1;
@@ -160,6 +161,7 @@
     return [s, e];
   }
 
+  // metallic gloed in segment, licht vast in schermcoördinaten
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
     const [s, e] = normBoog(a0, a1);
@@ -200,6 +202,7 @@
     }
     rctx.restore();
 
+    // glansstrepen
     rctx.save();
     rctx.translate(CX, CY);
     rctx.rotate(-Math.PI / 10);
@@ -216,6 +219,7 @@
     rctx.restore();
     rctx.globalAlpha = 1;
 
+    // highlights
     rctx.save();
     if (supportMode(rctx, "screen")) {
       rctx.globalCompositeOperation = "screen";
@@ -359,7 +363,7 @@
     document.getElementById("live").textContent = `Kleur ${tekst}`;
   }
 
-  // monster
+  // ---------- monster ----------
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
   const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
