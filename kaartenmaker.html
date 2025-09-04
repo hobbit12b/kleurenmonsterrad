@@ -2,58 +2,50 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <title>2x2 Kleuren Bingo — 25 kaarten</title>
+  <title>2x2 Kleuren Bingo — 25 unieke kaarten</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root { --bg:#f6f7fb; --fg:#222; --paper:#fff; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 20px;
-      font-family: system-ui, Arial, sans-serif;
-      background: var(--bg); color: var(--fg);
-    }
-    h1 { margin: 0 0 12px 0; font-size: 22px; }
-    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    body { margin:0; padding:20px; font-family:system-ui,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    h1 { margin:0 0 12px 0; font-size:22px; }
+    .toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
     button, select {
-      padding: 8px 12px; border: 0; border-radius: 12px; cursor: pointer;
-      background: var(--fg); color: #fff; font-size: 14px;
+      padding:8px 12px; border:0; border-radius:12px; cursor:pointer;
+      background:var(--fg); color:#fff; font-size:14px;
     }
-    button[disabled]{ opacity:.6; cursor: not-allowed; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-    .card {
-      background: var(--paper); border: 4px solid var(--fg); border-radius: 16px; padding: 12px;
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-    }
-    .card h2 { font-size: 14px; margin: 0; }
-    canvas.cardcnv { width: 100%; height: auto; background: #fff; border-radius: 10px; }
-    .row { display: flex; gap: 10px; align-items: center; }
-    a.dl { text-decoration: none; color: #fff; background: #2d6cdf; padding: 6px 10px; border-radius: 10px; font-size: 13px; }
+    button[disabled]{ opacity:.6; cursor:not-allowed; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:16px; }
+    .card { background:var(--paper); border:4px solid var(--fg); border-radius:16px; padding:12px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .card h2 { font-size:14px; margin:0; }
+    canvas.cardcnv { width:100%; height:auto; background:#fff; border-radius:10px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    a.dl { text-decoration:none; color:#fff; background:#2d6cdf; padding:6px 10px; border-radius:10px; font-size:13px; }
     @media print {
-      .toolbar { display: none; }
-      body { background: #fff; padding: 0; }
-      .grid { grid-template-columns: repeat(2, 1fr); gap: 0; }
-      .card { border: 0; page-break-inside: avoid; }
+      .toolbar { display:none; }
+      body { background:#fff; padding:0; }
+      .grid { grid-template-columns:repeat(2, 1fr); gap:0; }
+      .card { border:0; page-break-inside:avoid; }
     }
   </style>
 </head>
 <body>
   <h1>2x2 Kleuren Bingo</h1>
   <div class="toolbar">
-    <button id="gen">Genereer 25 kaarten</button>
+    <button id="gen">Genereer 25 unieke kaarten</button>
     <button id="printBtn">Print</button>
-    <div class="row">
-      <label for="set">Kleurenset</label>
+    <label>Kleurenset
       <select id="set">
         <option value="les">Bruin, Zilver, Goud, Beige, Turquoise, Zalmroze, Grijs</option>
       </select>
-    </div>
+    </label>
   </div>
 
   <div id="status" aria-live="polite"></div>
   <div id="grid" class="grid"></div>
 
   <script>
-  // 1) instellingen en kleuren
+  // --------- data ---------
   const sets = {
     les: ["Bruin","Zilver","Goud","Beige","Turquoise","Zalmroze","Grijs"]
   };
@@ -68,26 +60,20 @@
   };
   const metallic = new Set(["Goud","Zilver"]);
 
-  // 2) assets
+  // --------- assets ---------
   const imgMask  = new Image(); imgMask.src = "monster-mask.png";
   const imgLine  = new Image(); imgLine.src = "monster-line.png";
-  const imgPupil = new Image(); imgPupil.src = "monster-pupillen.png"; // niet gebruikt in deze set
+  const imgPupil = new Image(); imgPupil.src = "monster-pupillen.png"; // niet gebruikt hier
 
   let assetsOK = false;
   Promise.all([
     new Promise(r => imgMask.onload = r),
     new Promise(r => imgLine.onload = r),
     new Promise(r => imgPupil.onload = r)
-  ]).then(() => { assetsOK = true; });
+  ]).then(() => assetsOK = true);
 
-  // 3) helpers
-  function shuffle(a) {
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
+  // --------- helpers ---------
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
 
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
@@ -98,7 +84,7 @@
   }
 
   function goudZilverGlans(ctx, x, y, w, h, isGoud) {
-    const lg = ctx.createLinearGradient(0, y, 0, y + h);
+    const lg = ctx.createLinearGradient(0, y, 0, y+h);
     if (isGoud) {
       lg.addColorStop(0.00, "rgba(255,250,210,0.70)");
       lg.addColorStop(0.35, "rgba(255,255,255,0.18)");
@@ -110,167 +96,153 @@
       lg.addColorStop(1.00, "rgba(235,235,235,0.32)");
     }
     ctx.save();
-    if (supportMode(ctx, "overlay")) {
+    if (supportMode(ctx,"overlay")) {
       ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = lg;
-      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
       ctx.globalCompositeOperation = "source-over";
     } else {
       ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = lg;
-      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
       ctx.globalCompositeOperation = "lighter";
-      ctx.fillStyle = "rgba(255,255,255,0.18)";
-      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fillRect(x,y,w,h);
       ctx.globalCompositeOperation = "source-over";
     }
-    // highlight vlek
-    if (supportMode(ctx, "screen")) {
+    // highlight
+    if (supportMode(ctx,"screen")) {
       ctx.globalCompositeOperation = "screen";
-      const r = Math.max(w, h) * 0.7;
-      const rg = ctx.createRadialGradient(x + w*0.25, y + h*0.22, 0, x + w*0.25, y + h*0.22, r);
-      rg.addColorStop(0.0, "rgba(255,255,255,1)");
+      const r = Math.max(w,h)*0.7;
+      const rg = ctx.createRadialGradient(x+w*0.25, y+h*0.22, 0, x+w*0.25, y+h*0.22, r);
+      rg.addColorStop(0,"rgba(255,255,255,1)");
       rg.addColorStop(0.35,"rgba(255,255,255,0.55)");
-      rg.addColorStop(1.0, "rgba(255,255,255,0)");
-      ctx.fillStyle = rg;
-      ctx.fillRect(x, y, w, h);
+      rg.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.fillStyle = rg; ctx.fillRect(x,y,w,h);
       ctx.globalCompositeOperation = "source-over";
     }
     ctx.restore();
   }
 
-  function tekenMonsterInVeld(ctx, kleurNaam, rect) {
-    const {x, y, w, h} = rect;
-    // 1 kleurvlak
-    ctx.save();
-    ctx.fillStyle = kleurMap[kleurNaam] || "#000";
-    ctx.fillRect(x, y, w, h);
-    ctx.globalCompositeOperation = "destination-in";
-    // masker passend schalen
+  // teken 1 cel in een eigen offscreen canvas en plak het in het kaartcanvas
+  function renderCelTo(ctxMain, kleurNaam, rect) {
+    const {x,y,w,h} = rect;
+
+    const off = document.createElement("canvas");
+    off.width = w; off.height = h;
+    const c = off.getContext("2d");
+
+    // vulling
+    c.fillStyle = kleurMap[kleurNaam] || "#000";
+    c.fillRect(0, 0, w, h);
+
+    // masker
+    c.globalCompositeOperation = "destination-in";
     const r = Math.min(w / imgMask.width, h / imgMask.height);
     const mw = Math.round(imgMask.width * r);
     const mh = Math.round(imgMask.height * r);
-    const mx = x + Math.round((w - mw) / 2);
-    const my = y + Math.round((h - mh) / 2);
-    ctx.drawImage(imgMask, mx, my, mw, mh);
-    ctx.globalCompositeOperation = "source-over";
+    const mx = Math.round((w - mw)/2);
+    const my = Math.round((h - mh)/2);
+    c.drawImage(imgMask, mx, my, mw, mh);
+    c.globalCompositeOperation = "source-over";
 
-    // 2 glans voor metaal
+    // glans
     if (metallic.has(kleurNaam)) {
-      goudZilverGlans(ctx, x, y, w, h, kleurNaam === "Goud");
+      goudZilverGlans(c, 0, 0, w, h, kleurNaam==="Goud");
     }
 
-    // 3 lijnenlaag, altijd zwart in deze set
-    ctx.drawImage(imgLine, mx, my, mw, mh);
+    // lijnen
+    c.drawImage(imgLine, mx, my, mw, mh);
 
-    ctx.restore();
+    // plak in hoofddoek
+    ctxMain.drawImage(off, x, y);
 
     // label
-    ctx.fillStyle = "#111";
-    ctx.font = "bold 16px system-ui, Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(kleurNaam, x + w / 2, y + h - 8);
+    ctxMain.fillStyle = "#111";
+    ctxMain.font = "bold 16px system-ui, Arial";
+    ctxMain.textAlign = "center";
+    ctxMain.fillText(kleurNaam, x + w/2, y + h - 8);
   }
 
-  // 4) kaart tekenen naar canvas
+  // genereer alle combinaties (n choose 4)
+  function combos4(arr) {
+    const res = [];
+    for (let i=0;i<arr.length;i++)
+      for (let j=i+1;j<arr.length;j++)
+        for (let k=j+1;k<arr.length;k++)
+          for (let l=k+1;l<arr.length;l++) res.push([arr[i],arr[j],arr[k],arr[l]]);
+    return res;
+  }
+
+  // rangschik vier kleuren in 2x2 waarbij goud en zilver diagonaal
+  function plaats2x2(k4) {
+    const hasG = k4.includes("Goud");
+    const hasZ = k4.includes("Zilver");
+    const rest = k4.filter(k => k!=="Goud" && k!=="Zilver");
+    if (hasG && hasZ) {
+      // diagonaal: pos 0 en 3
+      const volg = ["Goud", rest[0], rest[1], "Zilver"];
+      return volg;
+    }
+    return shuffle([...k4]); // anders willekeurig
+  }
+
+  // teken één kaart
   function tekenKaart(canvas, kleuren, index) {
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
+    const W = canvas.width = 600, H = canvas.height = 800;
+    ctx.clearRect(0,0,W,H);
 
     // kader
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, W, H);
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = "#222";
-    ctx.strokeRect(6, 6, W - 12, H - 12);
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+    ctx.lineWidth=6; ctx.strokeStyle="#222"; ctx.strokeRect(6,6,W-12,H-12);
 
     // titel
-    ctx.fillStyle = "#222";
-    ctx.font = "bold 18px system-ui, Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(`Kleuren Bingo kaart ${index + 1}`, 16, 30);
+    ctx.fillStyle="#222"; ctx.font="bold 18px system-ui, Arial"; ctx.textAlign="left";
+    ctx.fillText(`Kleuren Bingo kaart ${index+1}`, 16, 30);
 
-    // raster 2 x 2
-    const pad = 16;
-    const gridX = 16, gridY = 44;
-    const gridW = W - gridX * 2, gridH = H - gridY - 16;
-    const celW = Math.floor((gridW - pad) / 2);
-    const celH = Math.floor((gridH - pad) / 2);
+    // raster 2x2
+    const pad = 16, gridX=16, gridY=44;
+    const gridW = W - gridX*2, gridH = H - gridY - 16;
+    const celW = Math.floor((gridW - pad)/2), celH = Math.floor((gridH - pad)/2);
 
     const rects = [
-      { x: gridX,            y: gridY,            w: celW, h: celH },
-      { x: gridX + celW+pad, y: gridY,            w: celW, h: celH },
-      { x: gridX,            y: gridY + celH+pad, w: celW, h: celH },
-      { x: gridX + celW+pad, y: gridY + celH+pad, w: celW, h: celH }
+      {x:gridX,            y:gridY,            w:celW, h:celH},
+      {x:gridX + celW+pad, y:gridY,            w:celW, h:celH},
+      {x:gridX,            y:gridY + celH+pad, w:celW, h:celH},
+      {x:gridX + celW+pad, y:gridY + celH+pad, w:celW, h:celH}
     ];
 
-    // cel achtergrond en monster
-    for (let i = 0; i < 4; i++) {
+    // cel panelen
+    ctx.lineWidth = 2; ctx.strokeStyle = "#222";
+    rects.forEach(r => {
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12);
+      ctx.fillStyle="#ffffff"; ctx.fill(); ctx.stroke();
+    });
+
+    // monsters
+    const order = plaats2x2(kleuren);
+    for (let i=0;i<4;i++) {
       const r = rects[i];
-      // celvlak
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#222";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(r.x, r.y, r.w, r.h, 12);
-      ctx.fill();
-      ctx.stroke();
-
-      tekenMonsterInVeld(ctx, kleuren[i], {x:r.x+8, y:r.y+8, w:r.w-16, h:r.h-16});
+      renderCelTo(ctx, order[i], {x:r.x+8, y:r.y+8, w:r.w-16, h:r.h-16});
     }
   }
 
-  // 5) kaarten samenstellen, elke kleur minimaal één keer
-  function maakPakket(kleuren, aantal = 25) {
-    // we bouwen een lijst van kaartjes, elke kaart is 4 kleuren
-    // eerst zorgen dat elke kleur minstens één keer voorkomt
-    const kaarten = [];
-    const basis = [...kleuren];
-    while (basis.length < aantal * 4) basis.push(...kleuren);
-    shuffle(basis);
-
-    // puzzel goud en zilver niet naast elkaar binnen één kaart
-    function valide(c4) {
-      const s = new Set(c4);
-      return s.size === 4 && !(s.has("Goud") && s.has("Zilver") && ( // ze mogen wel samen, maar niet buren
-        // buren op 2 x 2 raster: 0-1, 0-2, 1-3, 2-3
-        // we keuren af als ze exact in een burenpaar zitten
-        (c4[0]==="Goud"&&c4[1]==="Zilver")||(c4[0]==="Zilver"&&c4[1]==="Goud")||
-        (c4[0]==="Goud"&&c4[2]==="Zilver")||(c4[0]==="Zilver"&&c4[2]==="Goud")||
-        (c4[1]==="Goud"&&c4[3]==="Zilver")||(c4[1]==="Zilver"&&c4[3]==="Goud")||
-        (c4[2]==="Goud"&&c4[3]==="Zilver")||(c4[2]==="Zilver"&&c4[3]==="Goud")
-      ));
-    }
-
-    let i = 0;
-    while (kaarten.length < aantal && i + 3 < basis.length) {
-      let c4 = [basis[i], basis[i+1], basis[i+2], basis[i+3]];
-      i += 4;
-      // herstel als er dubbels in zitten of verboden buur
-      let tries = 0;
-      while (!valide(c4) && tries < 20) {
-        c4 = shuffle([...kleuren]).slice(0,4);
-        tries++;
-      }
-      kaarten.push(c4);
-    }
-
-    // fallback als we door afronding te weinig hebben
-    while (kaarten.length < aantal) kaarten.push(shuffle([...kleuren]).slice(0,4));
-    return kaarten;
+  // bouw 25 unieke kaarten (combinaties zonder herhaling)
+  function bouwUnieke25(kleuren) {
+    const alle = combos4(kleuren);   // 35 bij 7 kleuren
+    shuffle(alle);
+    return alle.slice(0,25);
   }
 
-  // 6) UI handlers
+  // --------- UI ---------
   const grid = document.getElementById("grid");
   const status = document.getElementById("status");
+
   document.getElementById("gen").addEventListener("click", async () => {
     const setKey = document.getElementById("set").value;
     const kleuren = sets[setKey];
-    status.textContent = "Bezig met genereren…";
-    await new Promise(r => setTimeout(r, 0)); // laat de UI even updaten
 
-    // wacht op assets
+    status.textContent = "Bezig met genereren…";
+    await new Promise(r => setTimeout(r, 0));
+
     if (!assetsOK) {
       await Promise.all([
         new Promise(r => imgMask.complete ? r() : imgMask.onload = r),
@@ -279,39 +251,23 @@
       ]);
     }
 
-    const pakket = maakPakket(kleuren, 25);
+    const pakket = bouwUnieke25(kleuren);
     grid.innerHTML = "";
-    pakket.forEach((c4, idx) => {
+    pakket.forEach((k4, idx) => {
       const wrap = document.createElement("div");
       wrap.className = "card";
       const h2 = document.createElement("h2");
       h2.textContent = `Kaart ${idx+1}`;
       const cnv = document.createElement("canvas");
       cnv.className = "cardcnv";
-      cnv.width = 600; cnv.height = 800;
-
-      const row = document.createElement("div");
-      row.className = "row";
-      const dl = document.createElement("a");
-      dl.className = "dl";
-      dl.href = "#";
-      dl.textContent = "Download PNG";
-      dl.addEventListener("click", e => {
-        e.preventDefault();
-        dl.href = cnv.toDataURL("image/png");
-        dl.download = `kaart-${idx+1}.png`;
-      });
-
-      wrap.appendChild(h2);
-      wrap.appendChild(cnv);
-      row.appendChild(dl);
-      wrap.appendChild(row);
-      grid.appendChild(wrap);
-
-      tekenKaart(cnv, c4, idx);
+      const row = document.createElement("div"); row.className = "row";
+      const dl = document.createElement("a"); dl.className="dl"; dl.href="#"; dl.textContent="Download PNG";
+      dl.addEventListener("click", e => { e.preventDefault(); dl.href = cnv.toDataURL("image/png"); dl.download = `kaart-${idx+1}.png`; });
+      wrap.appendChild(h2); wrap.appendChild(cnv); row.appendChild(dl); wrap.appendChild(row); grid.appendChild(wrap);
+      tekenKaart(cnv, k4, idx);
     });
 
-    status.textContent = `Klaar, ${pakket.length} kaarten`;
+    status.textContent = `Klaar, ${pakket.length} unieke kaarten`;
   });
 
   document.getElementById("printBtn").addEventListener("click", () => window.print());
