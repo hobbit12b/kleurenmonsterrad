@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <title>2x2 Kleuren Bingo — 25 unieke kaarten met kleurenmonster</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg:#f6f7fb; --fg:#222; --panel:#fff;
+      --grid: 3;           /* kaarten per rij op scherm */
+      --kaart-w: 86mm;     /* breedte per kaart voor print */
+      --kaart-h: 86mm;     /* hoogte per kaart */
+      --r: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, Arial, sans-serif;
+    }
+    header {
+      display: flex; align-items: end; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap; margin: 8px 0 16px;
+    }
+    h1 { font-size: 22px; margin: 0; }
+    .acties { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button {
+      border: 0; border-radius: 12px;
+      padding: 10px 16px; background: var(--fg); color: #fff; cursor: pointer;
+      font-size: 14px;
+    }
+    .info { font-size: 14px; opacity: .85; }
+
+    .rooster {
+      display: grid;
+      grid-template-columns: repeat(var(--grid), minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .kaart {
+      background: var(--panel);
+      border: 3px solid var(--fg);
+      border-radius: var(--r);
+      padding: 10px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      break-inside: avoid;
+      width: var(--kaart-w);
+      height: var(--kaart-h);
+    }
+    .kop {
+      display: flex; justify-content: space-between; align-items: center;
+      font-weight: 700; font-size: 14px; margin-bottom: 8px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 8px;
+      height: 100%;
+    }
+    .vak {
+      border: 2px solid #222;
+      border-radius: 12px;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      align-items: center;
+      justify-items: center;
+      text-align: center;
+      padding: 6px;
+      position: relative;
+      overflow: hidden;
+      background: #fff;
+    }
+    canvas.monstercanvas {
+      width: 100%;
+      height: 100%;
+      max-width: 180px;
+      max-height: 160px;
+      display: block;
+    }
+    .label {
+      margin-top: 6px;
+      background: rgba(255,255,255,.9);
+      border: 2px solid #222;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* print */
+    @media print {
+      :root { --grid: 3; } /* drie per rij op A4 staand */
+      body { padding: 0; background: #fff; }
+      header, .acties, .info { display: none; }
+      .rooster {
+        gap: 10mm;
+        padding: 10mm;
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .kaart { border-width: 2px; }
+      .vak { border-width: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>2x2 Kleuren Bingo</h1>
+    <div class="acties">
+      <button id="regen">Genereer opnieuw</button>
+      <span class="info">25 unieke kaarten, elke kleur minimaal één keer, kleurenmonster per vak, glans bij Zilver en Goud</span>
+    </div>
+  </header>
+
+  <section id="container" class="rooster" aria-live="polite"></section>
+
+  <script>
+    // ============== configuratie kleuren ==============
+    const KLEUREN = [
+      { naam:"Bruin",     hex:"#8B4513" },
+      { naam:"Zilver",    hex:"#C0C0C0", metallic:true },
+      { naam:"Goud",      hex:"#D4AF37", metallic:true },
+      { naam:"Beige",     hex:"#F5F5DC" },
+      { naam:"Turquoise", hex:"#40E0D0" },
+      { naam:"Zalmroze",  hex:"#FFA07A" },
+      { naam:"Grijs",     hex:"#BDBDBD" }
+    ];
+    const AANTAL_KAARTEN = 25;
+
+    // ============== assets ==============
+    const imgMask = new Image();    imgMask.src = "monster-mask.png";  // witte silhouette
+    const imgLine = new Image();    imgLine.src = "monster-line.png";  // zwarte lijntekening
+
+    let assetsOK = false;
+    Promise.all([
+      new Promise(res => imgMask.onload = res),
+      new Promise(res => imgLine.onload = res),
+    ]).then(() => { assetsOK = true; bouwRooster(); });
+
+    // ============== helpers algemeen ==============
+    function shuffle(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i++) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // symmetrie op 2 bij 2, indexvolgorde row major: [0,1,2,3] is [[0,1],[2,3]]
+    const SYM = [
+      [0,1,2,3], // identiek
+      [2,0,3,1], // rot 90
+      [3,2,1,0], // rot 180
+      [1,3,0,2], // rot 270
+      [1,0,3,2], // spiegel verticaal
+      [2,3,0,1], // spiegel horizontaal
+      [0,2,1,3], // diagonaal hoofd
+      [3,1,2,0]  // diagonaal neven
+    ];
+    function canonSign(names4) {
+      const reps = SYM.map(map => map.map(i => names4[i]).join("|"));
+      reps.sort();
+      return reps[0];
+    }
+
+    // ============== generator kaarten ==============
+    function maakKaart() {
+      const gekozen = shuffle(KLEUREN).slice(0, 4);   // vier unieke kleuren
+      const volgorde = shuffle(gekozen);              // willekeurige plaatsing
+      const names = volgorde.map(k => k.naam);
+      const sign = canonSign(names);                  // symmetrie-vrij
+      return { vakken: volgorde, sign };
+    }
+
+    // garandeer dat elke kleur ten minste één keer ergens voorkomt
+    function genereerUniekeKaarten(aantal) {
+      const set = new Set();
+      const kaarten = [];
+      const nogNodig = new Set(KLEUREN.map(k => k.naam));
+
+      let pogingen = 0;
+      while (kaarten.length < aantal && pogingen < 20000) {
+        let k = maakKaart();
+
+        // als er nog kleuren missen, forceer dat deze kaart er minstens één bevat
+        if (nogNodig.size > 0) {
+          const miss = [...nogNodig];
+          const bevat = k.vakken.some(v => nogNodig.has(v.naam));
+          if (!bevat) {
+            // vervang één vak door een nog missende kleur die nog niet op de kaart staat
+            const missNaam = miss[Math.floor(Math.random() * miss.length)];
+            const missKleur = KLEUREN.find(x => x.naam === missNaam);
+            const namenOpKaart = new Set(k.vakken.map(v => v.naam));
+            if (!namenOpKaart.has(missNaam)) {
+              const i = Math.floor(Math.random() * 4);
+              k.vakken[i] = missKleur;
+            }
+            const names = k.vakken.map(v => v.naam);
+            k.sign = canonSign(names);
+          }
+        }
+
+        if (!set.has(k.sign)) {
+          set.add(k.sign);
+          kaarten.push(k);
+          // werk nogNodig bij
+          k.vakken.forEach(v => nogNodig.delete(v.naam));
+        }
+        pogingen++;
+      }
+      return kaarten;
+    }
+
+    // ============== tekenen van het kleurenmonster ==============
+    function supportMode(ctx, mode) {
+      const prev = ctx.globalCompositeOperation;
+      ctx.globalCompositeOperation = mode;
+      const ok = (ctx.globalCompositeOperation === mode);
+      ctx.globalCompositeOperation = prev;
+      return ok;
+    }
+
+    function voegMetaalGlansToe(ctx, type, x, y, w, h) {
+      // overlay gradiënt
+      const overlay = document.createElement("canvas");
+      overlay.width = w; overlay.height = h;
+      const o = overlay.getContext("2d");
+      const lg = o.createLinearGradient(0, 0, 0, h);
+      if (type === "Goud") {
+        lg.addColorStop(0.00, "rgba(255,250,210,0.75)");
+        lg.addColorStop(0.35, "rgba(255,255,255,0.18)");
+        lg.addColorStop(0.60, "rgba(0,0,0,0.32)");
+        lg.addColorStop(1.00, "rgba(120,90,0,0.28)");
+      } else {
+        lg.addColorStop(0.00, "rgba(255,255,255,0.78)");
+        lg.addColorStop(0.50, "rgba(0,0,0,0.32)");
+        lg.addColorStop(1.00, "rgba(235,235,235,0.34)");
+      }
+      o.fillStyle = lg;
+      o.fillRect(0, 0, w, h);
+      o.globalCompositeOperation = "destination-in";
+      o.drawImage(imgMask, 0, 0, w, h);
+
+      // brushed textuur
+      const tx = document.createElement("canvas");
+      tx.width = w; tx.height = h;
+      const t = tx.getContext("2d");
+      t.fillStyle = "rgba(255,255,255,0.10)";
+      for (let i = 0; i < w; i += 2) t.fillRect(i, 0, 1, h);
+      t.globalCompositeOperation = "destination-in";
+      t.drawImage(imgMask, 0, 0, w, h);
+
+      ctx.save();
+      if (supportMode(ctx, "overlay")) {
+        ctx.globalCompositeOperation = "overlay";
+        ctx.drawImage(overlay, x, y);
+        ctx.globalCompositeOperation = "soft-light";
+        ctx.drawImage(tx, x, y);
+        ctx.globalCompositeOperation = "source-over";
+      } else {
+        ctx.globalAlpha = 0.9; ctx.drawImage(overlay, x, y); ctx.globalAlpha = 1;
+        ctx.globalAlpha = 0.3; ctx.drawImage(tx, x, y); ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+
+      // specular highlights
+      const spec = document.createElement("canvas");
+      spec.width = w; spec.height = h;
+      const s = spec.getContext("2d");
+      const rg = s.createRadialGradient(w * 0.28, h * 0.22, 0, w * 0.28, h * 0.22, Math.max(w, h) * 0.55);
+      rg.addColorStop(0.00, "rgba(255,255,255,1.0)");
+      rg.addColorStop(0.30, "rgba(255,255,255,0.65)");
+      rg.addColorStop(1.00, "rgba(255,255,255,0.0)");
+      s.fillStyle = rg;
+      s.fillRect(0, 0, w, h);
+      const rg2 = s.createRadialGradient(w * 0.70, h * 0.78, 0, w * 0.70, h * 0.78, Math.max(w, h) * 0.28);
+      rg2.addColorStop(0.00, "rgba(255,255,255,0.88)");
+      rg2.addColorStop(0.40, "rgba(255,255,255,0.38)");
+      rg2.addColorStop(1.00, "rgba(255,255,255,0.0)");
+      s.fillStyle = rg2;
+      s.fillRect(0, 0, w, h);
+      s.globalCompositeOperation = "destination-in";
+      s.drawImage(imgMask, 0, 0, w, h);
+
+      ctx.save();
+      if (supportMode(ctx, "screen")) {
+        ctx.globalCompositeOperation = "screen";
+        ctx.drawImage(spec, x, y);
+        ctx.globalCompositeOperation = "source-over";
+      } else {
+        ctx.globalAlpha = 0.7; ctx.drawImage(spec, x, y); ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    function tekenMonsterOpCanvas(canvas, kleur) {
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // kader
+      ctx.save();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#222";
+      ctx.strokeRect(4, 4, W - 8, H - 8);
+      ctx.restore();
+
+      // beschikbare ruimte
+      const pad = 10;
+      const doelW = W - pad * 2;
+      const doelH = H - pad * 2;
+      const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
+      const w = Math.max(1, Math.round(imgMask.width * ratio));
+      const h = Math.max(1, Math.round(imgMask.height * ratio));
+      const x = Math.round((W - w) / 2);
+      const y = Math.round((H - h) / 2);
+
+      // vulling binnen masker
+      ctx.save();
+      ctx.fillStyle = kleur.hex;
+      ctx.fillRect(x, y, w, h);
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(imgMask, x, y, w, h);
+      ctx.globalCompositeOperation = "source-over";
+
+      // metallic glans indien nodig
+      if (kleur.metallic) {
+        voegMetaalGlansToe(ctx, kleur.naam, x, y, w, h);
+      }
+
+      // lijnen erbovenop
+      ctx.drawImage(imgLine, x, y, w, h);
+      ctx.restore();
+    }
+
+    // ============== DOM ==============
+    function maakVakEl(kleur) {
+      const el = document.createElement("div");
+      el.className = "vak";
+      const c = document.createElement("canvas");
+      c.className = "monstercanvas";
+      // logische pixels hoger voor printkwaliteit
+      c.width = 300; c.height = 240;
+      el.appendChild(c);
+      const lab = document.createElement("div");
+      lab.className = "label";
+      lab.textContent = kleur.naam;
+      el.appendChild(lab);
+
+      // teken als assets geladen zijn, anders later bij build
+      if (assetsOK) tekenMonsterOpCanvas(c, kleur);
+      else c.dataset.kleur = kleur.naam;
+
+      return el;
+    }
+
+    function maakKaartEl(kaart, index) {
+      const el = document.createElement("article");
+      el.className = "kaart";
+      el.setAttribute("aria-label", `Bingokaart ${index+1}`);
+
+      const kop = document.createElement("div");
+      kop.className = "kop";
+      kop.innerHTML = `<span>Bingo ${index+1}</span><span>2×2</span>`;
+      el.appendChild(kop);
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+
+      kaart.vakken.forEach(kleur => grid.appendChild(maakVakEl(kleur)));
+
+      el.appendChild(grid);
+      return el;
+    }
+
+    function bouwRooster() {
+      const container = document.getElementById("container");
+      if (!assetsOK) { container.textContent = "Bezig met laden van het kleurenmonster..."; return; }
+      container.innerHTML = "";
+      const kaarten = genereerUniekeKaarten(AANTAL_KAARTEN);
+      kaarten.forEach((k, i) => container.appendChild(maakKaartEl(k, i)));
+    }
+
+    document.getElementById("regen").addEventListener("click", bouwRooster);
+  </script>
+</body>
+</html>
