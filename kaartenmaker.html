@@ -46,17 +46,10 @@
 
   <script>
   // --------- data ---------
-  const sets = {
-    les: ["Bruin","Zilver","Goud","Beige","Turquoise","Zalmroze","Grijs"]
-  };
+  const sets = { les: ["Bruin","Zilver","Goud","Beige","Turquoise","Zalmroze","Grijs"] };
   const kleurMap = {
-    "Bruin":"#8B4513",
-    "Zilver":"#C0C0C0",
-    "Goud":"#D4AF37",
-    "Beige":"#F5F5DC",
-    "Turquoise":"#40E0D0",
-    "Zalmroze":"#FFA07A",
-    "Grijs":"#bdbdbd"
+    "Bruin":"#8B4513","Zilver":"#C0C0C0","Goud":"#D4AF37",
+    "Beige":"#F5F5DC","Turquoise":"#40E0D0","Zalmroze":"#FFA07A","Grijs":"#bdbdbd"
   };
   const metallic = new Set(["Goud","Zilver"]);
 
@@ -64,7 +57,6 @@
   const imgMask  = new Image(); imgMask.src = "monster-mask.png";
   const imgLine  = new Image(); imgLine.src = "monster-line.png";
   const imgPupil = new Image(); imgPupil.src = "monster-pupillen.png"; // niet gebruikt hier
-
   let assetsOK = false;
   Promise.all([
     new Promise(r => imgMask.onload = r),
@@ -74,7 +66,6 @@
 
   // --------- helpers ---------
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
-
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -83,7 +74,12 @@
     return ok;
   }
 
+  // Glans uitsluitend op bestaande pixels van het monster
   function goudZilverGlans(ctx, x, y, w, h, isGoud) {
+    ctx.save();
+    // Beperk alle volgende pixels tot bestaande alpha van het monster
+    ctx.globalCompositeOperation = "source-atop";
+
     const lg = ctx.createLinearGradient(0, y, 0, y+h);
     if (isGoud) {
       lg.addColorStop(0.00, "rgba(255,250,210,0.70)");
@@ -95,19 +91,19 @@
       lg.addColorStop(0.50, "rgba(0,0,0,0.36)");
       lg.addColorStop(1.00, "rgba(235,235,235,0.32)");
     }
-    ctx.save();
+
+    // Basissluier
     if (supportMode(ctx,"overlay")) {
       ctx.globalCompositeOperation = "overlay";
       ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
-      ctx.globalCompositeOperation = "source-over";
     } else {
       ctx.globalCompositeOperation = "multiply";
       ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
       ctx.globalCompositeOperation = "lighter";
       ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fillRect(x,y,w,h);
-      ctx.globalCompositeOperation = "source-over";
     }
-    // highlight
+
+    // Highlights
     if (supportMode(ctx,"screen")) {
       ctx.globalCompositeOperation = "screen";
       const r = Math.max(w,h)*0.7;
@@ -116,15 +112,18 @@
       rg.addColorStop(0.35,"rgba(255,255,255,0.55)");
       rg.addColorStop(1,"rgba(255,255,255,0)");
       ctx.fillStyle = rg; ctx.fillRect(x,y,w,h);
-      ctx.globalCompositeOperation = "source-over";
+    } else {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillRect(x, y, w, h/3);
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
 
-  // teken 1 cel in een eigen offscreen canvas en plak het in het kaartcanvas
+  // teken 1 cel in offscreen canvas en plak in kaart
   function renderCelTo(ctxMain, kleurNaam, rect) {
     const {x,y,w,h} = rect;
-
     const off = document.createElement("canvas");
     off.width = w; off.height = h;
     const c = off.getContext("2d");
@@ -143,7 +142,7 @@
     c.drawImage(imgMask, mx, my, mw, mh);
     c.globalCompositeOperation = "source-over";
 
-    // glans
+    // glans uitsluitend binnen de bestaande vorm
     if (metallic.has(kleurNaam)) {
       goudZilverGlans(c, 0, 0, w, h, kleurNaam==="Goud");
     }
@@ -151,7 +150,7 @@
     // lijnen
     c.drawImage(imgLine, mx, my, mw, mh);
 
-    // plak in hoofddoek
+    // plak in kaart
     ctxMain.drawImage(off, x, y);
 
     // label
@@ -161,7 +160,7 @@
     ctxMain.fillText(kleurNaam, x + w/2, y + h - 8);
   }
 
-  // genereer alle combinaties (n choose 4)
+  // alle 4-combinaties (n choose 4)
   function combos4(arr) {
     const res = [];
     for (let i=0;i<arr.length;i++)
@@ -171,17 +170,13 @@
     return res;
   }
 
-  // rangschik vier kleuren in 2x2 waarbij goud en zilver diagonaal
+  // diagonaal plaatsen als goud en zilver samen voorkomen
   function plaats2x2(k4) {
     const hasG = k4.includes("Goud");
     const hasZ = k4.includes("Zilver");
     const rest = k4.filter(k => k!=="Goud" && k!=="Zilver");
-    if (hasG && hasZ) {
-      // diagonaal: pos 0 en 3
-      const volg = ["Goud", rest[0], rest[1], "Zilver"];
-      return volg;
-    }
-    return shuffle([...k4]); // anders willekeurig
+    if (hasG && hasZ) return ["Goud", rest[0], rest[1], "Zilver"];
+    return shuffle([...k4]);
   }
 
   // teken één kaart
@@ -212,22 +207,16 @@
 
     // cel panelen
     ctx.lineWidth = 2; ctx.strokeStyle = "#222";
-    rects.forEach(r => {
-      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12);
-      ctx.fillStyle="#ffffff"; ctx.fill(); ctx.stroke();
-    });
+    rects.forEach(r => { ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fillStyle="#ffffff"; ctx.fill(); ctx.stroke(); });
 
     // monsters
     const order = plaats2x2(kleuren);
-    for (let i=0;i<4;i++) {
-      const r = rects[i];
-      renderCelTo(ctx, order[i], {x:r.x+8, y:r.y+8, w:r.w-16, h:r.h-16});
-    }
+    for (let i=0;i<4;i++) renderCelTo(ctx, order[i], {x:rects[i].x+8, y:rects[i].y+8, w:rects[i].w-16, h:rects[i].h-16});
   }
 
-  // bouw 25 unieke kaarten (combinaties zonder herhaling)
+  // 25 unieke kaarten (combinaties zonder herhaling)
   function bouwUnieke25(kleuren) {
-    const alle = combos4(kleuren);   // 35 bij 7 kleuren
+    const alle = combos4(kleuren); // 35 bij 7 kleuren
     shuffle(alle);
     return alle.slice(0,25);
   }
