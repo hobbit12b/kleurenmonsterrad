@@ -48,8 +48,8 @@
   // --------- data ---------
   const sets = { les: ["Bruin","Zilver","Goud","Beige","Turquoise","Zalmroze","Grijs"] };
   const kleurMap = {
-    "Bruin":"#8B4513","Zilver":"#C0C0C0","Goud":"#D4AF37",
-    "Beige":"#F5F5DC","Turquoise":"#40E0D0","Zalmroze":"#FFA07A","Grijs":"#bdbdbd"
+    "Bruin":"%238B4513".replace('%23','#'), "Zilver":"#C0C0C0", "Goud":"#D4AF37",
+    "Beige":"#F5F5DC", "Turquoise":"#40E0D0", "Zalmroze":"#FFA07A", "Grijs":"#bdbdbd"
   };
   const metallic = new Set(["Goud","Zilver"]);
 
@@ -66,21 +66,15 @@
 
   // --------- helpers ---------
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
-  function supportMode(ctx, mode) {
-    const prev = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = mode;
-    const ok = ctx.globalCompositeOperation === mode;
-    ctx.globalCompositeOperation = prev;
-    return ok;
-  }
 
-  // Glans uitsluitend op bestaande pixels van het monster
-  function goudZilverGlans(ctx, x, y, w, h, isGoud) {
-    ctx.save();
-    // Beperk alle volgende pixels tot bestaande alpha van het monster
-    ctx.globalCompositeOperation = "source-atop";
+  // Bouw een glans-overlay op apart canvas, mask die overlay met het monster-masker, plak dan pas
+  function metallicOverlayMasked(w, h, isGoud, maskX, maskY, maskW, maskH) {
+    const ov = document.createElement("canvas");
+    ov.width = w; ov.height = h;
+    const o = ov.getContext("2d");
 
-    const lg = ctx.createLinearGradient(0, y, 0, y+h);
+    // 1) basis verloop
+    const lg = o.createLinearGradient(0, 0, 0, h);
     if (isGoud) {
       lg.addColorStop(0.00, "rgba(255,250,210,0.70)");
       lg.addColorStop(0.35, "rgba(255,255,255,0.18)");
@@ -91,67 +85,75 @@
       lg.addColorStop(0.50, "rgba(0,0,0,0.36)");
       lg.addColorStop(1.00, "rgba(235,235,235,0.32)");
     }
+    o.fillStyle = lg;
+    o.fillRect(0, 0, w, h);
 
-    // Basissluier
-    if (supportMode(ctx,"overlay")) {
-      ctx.globalCompositeOperation = "overlay";
-      ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
-    } else {
-      ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = lg; ctx.fillRect(x,y,w,h);
-      ctx.globalCompositeOperation = "lighter";
-      ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fillRect(x,y,w,h);
+    // 2) glansstrepen
+    o.save();
+    o.translate(w/2, h/2);
+    o.rotate(-Math.PI/10);
+    o.translate(-w/2, -h/2);
+    o.globalAlpha = 0.55;
+    for (let i=0;i<3;i++) {
+      const gy = h*0.15 + i*h*0.25;
+      const g = o.createLinearGradient(0, gy, w, gy);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(0.5, "rgba(255,255,255,0.95)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      o.fillStyle = g;
+      o.fillRect(0, gy - h*0.06, w, h*0.12);
     }
+    o.restore();
+    o.globalAlpha = 1;
 
-    // Highlights
-    if (supportMode(ctx,"screen")) {
-      ctx.globalCompositeOperation = "screen";
-      const r = Math.max(w,h)*0.7;
-      const rg = ctx.createRadialGradient(x+w*0.25, y+h*0.22, 0, x+w*0.25, y+h*0.22, r);
-      rg.addColorStop(0,"rgba(255,255,255,1)");
-      rg.addColorStop(0.35,"rgba(255,255,255,0.55)");
-      rg.addColorStop(1,"rgba(255,255,255,0)");
-      ctx.fillStyle = rg; ctx.fillRect(x,y,w,h);
-    } else {
-      ctx.globalAlpha = 0.6;
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.fillRect(x, y, w, h/3);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
+    // 3) highlights
+    const rg = o.createRadialGradient(w*0.20, h*0.18, 0, w*0.20, h*0.18, Math.max(w,h)*0.7);
+    rg.addColorStop(0, "rgba(255,255,255,1.00)");
+    rg.addColorStop(0.35, "rgba(255,255,255,0.55)");
+    rg.addColorStop(1, "rgba(255,255,255,0.00)");
+    o.fillStyle = rg; o.fillRect(0,0,w,h);
+
+    // 4) MASkeer de overlay strikt met het monster-masker
+    o.globalCompositeOperation = "destination-in";
+    o.drawImage(imgMask, maskX, maskY, maskW, maskH);
+    o.globalCompositeOperation = "source-over";
+
+    return ov;
   }
 
-  // teken 1 cel in offscreen canvas en plak in kaart
+  // Render één cel via offscreen canvas
   function renderCelTo(ctxMain, kleurNaam, rect) {
     const {x,y,w,h} = rect;
-    const off = document.createElement("canvas");
-    off.width = w; off.height = h;
-    const c = off.getContext("2d");
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const cc = c.getContext("2d");
 
-    // vulling
-    c.fillStyle = kleurMap[kleurNaam] || "#000";
-    c.fillRect(0, 0, w, h);
+    // kleurvlak
+    cc.fillStyle = kleurMap[kleurNaam] || "#000";
+    cc.fillRect(0, 0, w, h);
 
-    // masker
-    c.globalCompositeOperation = "destination-in";
+    // masker toepassen
     const r = Math.min(w / imgMask.width, h / imgMask.height);
     const mw = Math.round(imgMask.width * r);
     const mh = Math.round(imgMask.height * r);
     const mx = Math.round((w - mw)/2);
     const my = Math.round((h - mh)/2);
-    c.drawImage(imgMask, mx, my, mw, mh);
-    c.globalCompositeOperation = "source-over";
 
-    // glans uitsluitend binnen de bestaande vorm
+    cc.globalCompositeOperation = "destination-in";
+    cc.drawImage(imgMask, mx, my, mw, mh);
+    cc.globalCompositeOperation = "source-over";
+
+    // glans alleen voor metaal, strikt gemaskeerd
     if (metallic.has(kleurNaam)) {
-      goudZilverGlans(c, 0, 0, w, h, kleurNaam==="Goud");
+      const ov = metallicOverlayMasked(w, h, kleurNaam==="Goud", mx, my, mw, mh);
+      cc.drawImage(ov, 0, 0);
     }
 
-    // lijnen
-    c.drawImage(imgLine, mx, my, mw, mh);
+    // lijnen erbovenop
+    cc.drawImage(imgLine, mx, my, mw, mh);
 
-    // plak in kaart
-    ctxMain.drawImage(off, x, y);
+    // plak de cel in de kaart
+    ctxMain.drawImage(c, x, y);
 
     // label
     ctxMain.fillStyle = "#111";
@@ -175,7 +177,7 @@
     const hasG = k4.includes("Goud");
     const hasZ = k4.includes("Zilver");
     const rest = k4.filter(k => k!=="Goud" && k!=="Zilver");
-    if (hasG && hasZ) return ["Goud", rest[0], rest[1], "Zilver"];
+    if (hasG && hasZ) return ["Goud", rest[0], rest[1], "Zilver"]; // diagonaal
     return shuffle([...k4]);
   }
 
@@ -205,7 +207,7 @@
       {x:gridX + celW+pad, y:gridY + celH+pad, w:celW, h:celH}
     ];
 
-    // cel panelen
+    // panelen
     ctx.lineWidth = 2; ctx.strokeStyle = "#222";
     rects.forEach(r => { ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fillStyle="#ffffff"; ctx.fill(); ctx.stroke(); });
 
@@ -214,7 +216,7 @@
     for (let i=0;i<4;i++) renderCelTo(ctx, order[i], {x:rects[i].x+8, y:rects[i].y+8, w:rects[i].w-16, h:rects[i].h-16});
   }
 
-  // 25 unieke kaarten (combinaties zonder herhaling)
+  // 25 unieke kaarten
   function bouwUnieke25(kleuren) {
     const alle = combos4(kleuren); // 35 bij 7 kleuren
     shuffle(alle);
