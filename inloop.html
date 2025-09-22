@@ -17,7 +17,6 @@
       gap: 16px;
       align-items: start;
     }
-    /* Op iPad liggend blijft het twee kolommen, pas vanaf smallere schermen één kolom */
     @media (max-width: 900px) {
       body { grid-template-columns: 1fr; }
     }
@@ -36,13 +35,10 @@
       padding: 8px;
     }
 
-    /* responsive canvas containers */
     .canvas-wrap { width: 100%; }
-    /* houd het rad altijd netjes rond, verhouding 5:4 zoals jouw ontwerp */
     #rad     { display:block; width:100%; aspect-ratio: 5 / 4; }
     #monster { display:block; width:100%; aspect-ratio: 5 / 6; }
 
-    /* resultaat vlak onder het rad */
     .resultaat-rij {
       display: grid;
       grid-template-columns: 110px 1fr;
@@ -55,7 +51,6 @@
       margin-top: 10px;
     }
 
-    /* jouw mondknop als afbeelding in ronde knop met zwarte rand */
     .spreekknop {
       width: 100px; height: 100px;
       border-radius: 50%;
@@ -82,7 +77,6 @@
   <div class="paneel">
     <div class="bordtitel">Spinner</div>
     <div class="canvas-wrap">
-      <!-- we laten width en height door JS zetten op basis van CSS maat en DPR -->
       <canvas id="rad" aria-label="kleurenspin" title="Tik op het rad om te draaien"></canvas>
     </div>
 
@@ -122,7 +116,7 @@ function sizeCanvasToCss(canvas) {
     canvas.width = w; canvas.height = h;
   }
   const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // werk in CSS pixels
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ctx, cssW: rect.width, cssH: rect.height };
 }
 function supportMode(ctx, mode) {
@@ -134,6 +128,10 @@ function supportMode(ctx, mode) {
 }
 
 /* ---------------- spraak en iPad fixes ---------------- */
+const SPEECH_RATE = 0.88;       // trager, prettiger voor jonge kinderen
+const SPEECH_PITCH = 1.0;
+const SPEECH_VOLUME = 1.0;
+
 let nlVoice = null;
 const isAppleMobile =
   /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -194,14 +192,14 @@ function primeTTS() {
     speechSynthesis.speak(u); ttsPrimed = true;
   } catch {}
 }
-function spreekEenmaal(text, rate = 1.0) {
+function spreekEenmaal(text, rate = SPEECH_RATE) {
   if (!('speechSynthesis' in window)) return;
   try {
     startIOSResumeWatchdog();
     if (!isAppleMobile) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     if (nlVoice) u.voice = nlVoice;
-    u.lang = nlVoice?.lang || 'nl-NL'; u.rate = rate; u.pitch = 1.0; u.volume = 1.0;
+    u.lang = nlVoice?.lang || 'nl-NL'; u.rate = rate; u.pitch = SPEECH_PITCH; u.volume = SPEECH_VOLUME;
     u.onend = () => { stopIOSResumeWatchdog(); };
     u.onerror = () => { stopIOSResumeWatchdog(); };
     speechSynthesis.speak(u);
@@ -210,8 +208,8 @@ function spreekEenmaal(text, rate = 1.0) {
 function spreekKleur(naam) {
   if (!naam) return;
   const key = String(naam).trim().toLowerCase();
-  if (['turquoise','turquose','turqoise'].includes(key)) { spreekEenmaal('thurkwáazùh', 0.98); return; }
-  spreekEenmaal(naam, 1.0);
+  if (['turquoise','turquose','turqoise'].includes(key)) { spreekEenmaal('thurkwáazùh', 0.90); return; }
+  spreekEenmaal(naam, SPEECH_RATE);
 }
 if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = pickVoicesSync;
@@ -259,15 +257,15 @@ function scheidBuren(arr, a, b) {
 }
 optes = opties; opties = scheidBuren(optes, 'Goud', 'Zilver');
 
-/* ---------------- spinner, nu volledig responsief op maat canvas ---------------- */
+/* ---------------- spinner ---------------- */
 const rad = document.getElementById('rad');
 const rctx = rad.getContext('2d');
 let hoek = 0, bezig = false, laatsteKleur = '';
+const laatste2 = []; // kleine geschiedenis
 
 function renderRad() {
   const { ctx, cssW, cssH } = sizeCanvasToCss(rad);
 
-  // bepaal centrum en straal op basis van actuele maat
   const minSide = Math.min(cssW, cssH);
   const R = minSide * 0.45;
   const CX = cssW * 0.44;
@@ -293,232 +291,4 @@ function renderRad() {
       overlayGrad.addColorStop(0.55,'rgba(0,0,0,0.42)');
       overlayGrad.addColorStop(1.00,'rgba(120,90,0,0.40)');
     } else {
-      overlayGrad.addColorStop(0.00,'rgba(255,255,255,0.90)');
-      overlayGrad.addColorStop(0.50,'rgba(0,0,0,0.42)');
-      overlayGrad.addColorStop(1.00,'rgba(235,235,235,0.42)');
-    }
-    if (supportMode(ctx,'overlay')) {
-      ctx.globalCompositeOperation='overlay';
-      ctx.fillStyle=overlayGrad; ctx.fillRect(CX-R, CY-R, R*2, R*2);
-      ctx.globalCompositeOperation='source-over';
-    } else {
-      ctx.globalCompositeOperation='multiply';
-      ctx.fillStyle=overlayGrad; ctx.fillRect(CX-R, CY-R, R*2, R*2);
-      ctx.globalCompositeOperation='lighter';
-      ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.fillRect(CX-R, CY-R, R*2, R*2);
-      ctx.globalCompositeOperation='source-over';
-    }
-    ctx.restore();
-  }
-
-  // segmenten
-  for (let i = 0; i < opties.length; i++) {
-    const naam = opties[i];
-    const [s, e] = normBoog(i * stap + rot, (i + 1) * stap + rot);
-    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.arc(CX, CY, R, s, e, false); ctx.closePath();
-    ctx.fillStyle = kleurMap[naam] || '#000'; ctx.fill();
-    tekenMetallicInSegment(naam, s, e);
-    ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.stroke();
-
-    const mid = s + (e - s) / 2;
-    ctx.save(); ctx.translate(CX, CY); ctx.rotate(mid);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#000';
-    ctx.font = `${Math.max(12, R*0.08)}px system-ui, Arial`;
-    ctx.fillText(naam, R - 10, 5);
-    ctx.restore();
-  }
-
-  // rand
-  ctx.lineWidth = 6; ctx.strokeStyle = '#333';
-  ctx.beginPath(); ctx.arc(CX, CY, R + 3, 0, Math.PI * 2); ctx.stroke();
-
-  // pijl rechts
-  const offset = R * 0.12;
-  const tipX = CX + R + offset;
-  const tipY = CY;
-  const baseX = tipX + offset * 1.8;
-  const halfH = offset * 1.2;
-  ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(baseX, tipY - halfH); ctx.lineTo(baseX, tipY + halfH);
-  ctx.closePath(); ctx.fillStyle = '#222'; ctx.fill();
-
-  // middelpunt
-  ctx.beginPath(); ctx.arc(CX, CY, Math.max(4, R*0.03), 0, Math.PI*2); ctx.fill();
-}
-
-function indexOnderPijl() {
-  const n = opties.length, stap = 360 / n;
-  let a = (-hoek) % 360; if (a < 0) a += 360;
-  return Math.floor(a / stap) % n;
-}
-
-function pickGewogen(){
-  const r = Math.random();
-  const pool = r < 0.8 ? preferredSet : limitedSet;
-  const item = pool[Math.floor(Math.random() * pool.length)];
-  return item.label;
-}
-function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2; }
-
-function draai() {
-  if (bezig) return;
-  if (isAppleMobile) { unlockAudio(); primeTTS(); }
-  bezig = true;
-
-  const doelNaam = pickGewogen();
-  const doelIndex = opties.indexOf(doelNaam);
-  const n = opties.length; const stapDeg = 360 / n;
-
-  const aDesired = doelIndex * stapDeg + stapDeg / 2;
-  let hoekTargetBase = (-aDesired) % 360; if (hoekTargetBase < 0) hoekTargetBase += 360;
-
-  const rondes = 4 + Math.floor(Math.random() * 2);
-  const current = hoek; const currentMod = ((current % 360) + 360) % 360;
-  const absoluteTarget = current + ((hoekTargetBase - currentMod + 360) % 360) + 360 * rondes;
-
-  const duur = 1800 + Math.random() * 600; const start = performance.now();
-  const startHoek = hoek; const delta = absoluteTarget - startHoek;
-
-  function frame(now) {
-    const t = Math.min(1, (now - start) / duur);
-    const e = easeInOutCubic(t); hoek = startHoek + delta * e; renderRad();
-    if (t < 1) requestAnimationFrame(frame);
-    else {
-      hoek = absoluteTarget % 360; renderRad();
-      const gekozen = doelNaam; laatsteKleur = gekozen;
-      toonResultaat(gekozen);
-      kleurMonster(kleurMap[gekozen], false, false, metallicKleuren.has(gekozen) ? gekozen : null);
-      if (document.getElementById('spreekToggle').checked) spreekKleur(gekozen);
-      bezig = false;
-    }
-  }
-  requestAnimationFrame(frame);
-}
-
-function toonResultaat(tekst){
-  document.getElementById('resultaat').textContent = `Gekozen kleur: ${tekst}`;
-  document.getElementById('live').textContent = `Kleur ${tekst}`;
-}
-
-rad.addEventListener('click', draai);
-
-/* ---------------- monster, ook responsief ---------------- */
-const mCanvas = document.getElementById('monster');
-const m = mCanvas.getContext('2d');
-const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
-const imgLine  = new Image();  imgLine.src  = "monster-line.png";
-const imgPupil = new Image();  imgPupil.src = "monster-pupillen.png";
-let assetsGereed = false;
-
-Promise.all([
-  new Promise(res => imgMask.onload  = res),
-  new Promise(res => imgLine.onload  = res),
-  new Promise(res => imgPupil.onload = res)
-]).then(() => { assetsGereed = true; tekenMonsterKader(); kleurMonster('#FFFFFF', false, false, null); });
-
-function tekenMonsterKader() {
-  const { ctx, cssW, cssH } = sizeCanvasToCss(mCanvas);
-  ctx.clearRect(0, 0, cssW, cssH);
-  ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = "#222"; ctx.fillStyle = "#fff";
-  ctx.beginPath(); rondeRechthoek(ctx, 12, 12, cssW - 24, cssH - 24, 18); ctx.fill(); ctx.stroke(); ctx.restore();
-}
-function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
-  if (!assetsGereed) return;
-  const { ctx, cssW, cssH } = sizeCanvasToCss(mCanvas);
-  tekenMonsterKader();
-
-  const pad = 24;
-  const doelW = cssW - pad * 2;
-  const doelH = cssH - pad * 2;
-  const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
-  const w = Math.max(1, Math.round(imgMask.width * ratio));
-  const h = Math.max(1, Math.round(imgMask.height * ratio));
-  const x = Math.round((cssW - w) / 2);
-  const y = Math.round((cssH - h) / 2);
-
-  ctx.save();
-  ctx.fillStyle = vulkleur; ctx.fillRect(x, y, w, h);
-  ctx.globalCompositeOperation = "destination-in"; ctx.imageSmoothingEnabled = true; ctx.drawImage(imgMask, x, y, w, h);
-  ctx.globalCompositeOperation = "source-over";
-
-  if (!lijnenWit) { ctx.drawImage(imgLine, x, y, w, h); }
-  else {
-    const off = document.createElement("canvas"); off.width = w; off.height = h; const o = off.getContext("2d");
-    o.fillStyle = "#ffffff"; o.fillRect(0, 0, off.width, off.height);
-    o.globalCompositeOperation = "destination-in"; o.drawImage(imgLine, 0, 0, off.width, off.height);
-    o.globalCompositeOperation = "source-over"; ctx.drawImage(off, x, y);
-  }
-  if (toonPupillen) ctx.drawImage(imgPupil, x, y, w, h);
-
-  if (metallicType) voegMetaalGlansToeMonster(ctx, metallicType, x, y, w, h);
-
-  ctx.restore();
-}
-function voegMetaalGlansToeMonster(ctx, type, x, y, w, h) {
-  const overlay = document.createElement('canvas'); overlay.width = w; overlay.height = h; const o = overlay.getContext('2d');
-  const lg = o.createLinearGradient(0, 0, 0, h);
-  if (type === 'Goud') {
-    lg.addColorStop(0.00,'rgba(255,250,210,0.95)');
-    lg.addColorStop(0.28,'rgba(255,255,255,0.38)');
-    lg.addColorStop(0.55,'rgba(0,0,0,0.48)');
-    lg.addColorStop(1.00,'rgba(120,90,0,0.48)');
-  } else {
-    lg.addColorStop(0.00,'rgba(255,255,255,0.95)');
-    lg.addColorStop(0.50,'rgba(0,0,0,0.48)');
-    lg.addColorStop(1.00,'rgba(235,235,235,0.52)');
-  }
-  o.fillStyle = lg; o.fillRect(0,0,w,h);
-  o.globalCompositeOperation = 'destination-in'; o.drawImage(imgMask, 0, 0, w, h);
-
-  ctx.save();
-  if (supportMode(ctx,'overlay')) { ctx.globalCompositeOperation='overlay'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='screen'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='source-over'; }
-  else { ctx.globalCompositeOperation='multiply'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='lighter'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='source-over'; }
-  ctx.restore();
-
-  const spec = document.createElement('canvas'); spec.width = w; spec.height = h; const s = spec.getContext('2d');
-  const rMax = Math.max(w,h);
-  const rg = s.createRadialGradient(w*.30, h*.25, 0, w*.30, h*.25, rMax*.60);
-  rg.addColorStop(0,'rgba(255,255,255,1.00)'); rg.addColorStop(.25,'rgba(255,255,255,0.85)'); rg.addColorStop(1,'rgba(255,255,255,0.00)');
-  s.fillStyle = rg; s.fillRect(0,0,w,h);
-  const rg2 = s.createRadialGradient(w*.70, h*.75, 0, w*.70, h*.75, rMax*.35);
-  rg2.addColorStop(0,'rgba(255,255,255,0.95)'); rg2.addColorStop(.40,'rgba(255,255,255,0.55)'); rg2.addColorStop(1,'rgba(255,255,255,0.00)');
-  s.fillStyle = rg2; s.fillRect(0,0,w,h);
-  s.globalCompositeOperation = 'destination-in'; s.drawImage(imgMask, 0, 0, w, h);
-
-  ctx.save(); if (supportMode(ctx,'screen')) { ctx.globalCompositeOperation='screen'; ctx.drawImage(spec,x,y); ctx.globalCompositeOperation='source-over'; } else { ctx.globalAlpha=.9; ctx.drawImage(spec,x,y); ctx.globalAlpha=1; } ctx.restore();
-}
-function rondeRechthoek(ctx, x, y, w, h, r) {
-  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
-}
-
-/* mondknop actie */
-document.getElementById('spreekBtn').addEventListener('click', ()=>{
-  if (isAppleMobile) { unlockAudio(); primeTTS(); }
-  spreekKleur(laatsteKleur || 'Geen kleur gekozen');
-});
-
-/* klik op rad om te draaien */
-document.getElementById('rad').addEventListener('click', draai);
-
-/* luister naar grootte en oriëntatie */
-function redrawAll() {
-  renderRad();
-  tekenMonsterKader();
-  if (laatsteKleur) {
-    kleurMonster(kleurMap[laatsteKleur], false, false, metallicKleuren.has(laatsteKleur) ? laatsteKleur : null);
-  } else {
-    kleurMonster('#FFFFFF', false, false, null);
-  }
-}
-window.addEventListener('resize', redrawAll);
-window.addEventListener('orientationchange', () => setTimeout(redrawAll, 50));
-
-/* init */
-renderRad();
-tekenMonsterKader();
-kleurMonster('#FFFFFF', false, false, null);
-</script>
-</body>
-</html>
+      o
