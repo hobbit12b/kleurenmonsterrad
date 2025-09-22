@@ -205,20 +205,28 @@ function spreekEenmaal(text, rate = SPEECH_RATE) {
     speechSynthesis.speak(u);
   } catch {}
 }
+// Kies een iPad-vriendelijke uitspraak voor "turquoise"
+function uitspraakTurquoise() {
+  // op iPad werkt spatie+komma om syllabes te forceren
+  return isAppleMobile
+    ? "toer, kwaa, zuh"    // klinkt als thur-kwáá-zuh in NL
+    : "thurkwáazùh";       // desktop stem pakt accenten prima
+}
+
 function spreekKleur(naam) {
   if (!naam) return;
   const key = String(naam).trim().toLowerCase();
-  if (['turquoise','turquose','turqoise'].includes(key)) { spreekEenmaal('thurkwáazùh', 0.90); return; }
-  spreekEenmaal(naam, SPEECH_RATE);
+
+  if (key === "turquoise" || key === "turquose" || key === "turqoise") {
+    // op iPad net iets trager voor duidelijkheid
+    spreekEenmaal(uitspraakTurquoise(), isAppleMobile ? 0.82 : 0.90);
+    return;
+  }
+
+  // alle andere kleuren
+  spreekEenmaal(naam, 0.88);  // iets langzamer dan standaard
 }
-if ('speechSynthesis' in window) {
-  speechSynthesis.onvoiceschanged = pickVoicesSync;
-  ensureVoice();
-  document.addEventListener('pointerdown', () => {
-    if (isAppleMobile && !ttsPrimed) { unlockAudio(); primeTTS(); }
-    ensureVoice();
-  }, { once: true });
-}
+
 
 /* ---------------- kleuren, 80 20 weging ---------------- */
 const preferredSet = [
@@ -534,3 +542,4 @@ kleurMonster('#FFFFFF', false, false, null);
 </script>
 </body>
 </html>
+
