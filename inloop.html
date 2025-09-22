@@ -54,7 +54,7 @@
   </div>
 
   <script>
-  // hulpfunctie voor blendmodus
+  // ---------- hulpfunctie voor blendmodus ----------
   function supportMode(ctx, mode) {
     const prev = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = mode;
@@ -63,8 +63,28 @@
     return ok;
   }
 
-  // spraak, turquoise met NL stem
+  // ---------- spraak met NL stem en iPad priming ----------
   let nlVoice = null;
+
+  const isAppleMobile =
+    /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  let ttsPrimed = false;
+  function primeTTS() {
+    if (ttsPrimed || !('speechSynthesis' in window)) return;
+    try {
+      const u = new SpeechSynthesisUtterance('.');
+      if (nlVoice) u.voice = nlVoice;
+      u.lang = nlVoice?.lang || 'nl-NL';
+      u.volume = 0; // stil
+      u.rate = 1;
+      u.pitch = 1;
+      speechSynthesis.speak(u);
+      ttsPrimed = true;
+    } catch {}
+  }
+
   function pickVoices() {
     try {
       const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
@@ -74,7 +94,14 @@
   if ("speechSynthesis" in window) {
     pickVoices();
     speechSynthesis.onvoiceschanged = pickVoices;
+
+    // eerste gebruikersactie, prime TTS op iPad en haal stemmen nogmaals op
+    document.addEventListener('pointerdown', () => {
+      if (isAppleMobile && !ttsPrimed) primeTTS();
+      pickVoices();
+    }, { once: true });
   }
+
   function spreekEenmaal(text, rate = 1.0) {
     try {
       speechSynthesis.cancel();
@@ -95,7 +122,7 @@
     spreekEenmaal(naam, 1.0);
   }
 
-  // kleuren en labels, 80 procent voorkeursset, 20 procent beperkte set
+  // ---------- kleuren en labels ----------
   const preferredSet = [
     { label: "Bruin",     hex: "#8B4513" },
     { label: "Zilver",    hex: "#C0C0C0" },
@@ -116,37 +143,36 @@
     { label: "Geel",  hex: "#FFFF00" }
   ];
 
-  // spinner opties en kleurmap
   let opties = [...preferredSet, ...limitedSet].map(o => o.label);
   const kleurMap = Object.fromEntries([...preferredSet, ...limitedSet].map(o => [o.label, o.hex]));
   const metallicKleuren = new Set(["Goud","Zilver"]);
 
-  // goud en zilver liever niet als buren
+  // Goud en Zilver liever geen buren
   function scheidBuren(arr, a, b) {
     const n = arr.length;
     let ia = arr.indexOf(a), ib = arr.indexOf(b);
     if (ia < 0 || ib < 0) return arr;
     const buren = (x, y) => Math.abs(x - y) === 1 || Math.abs(x - y) === n - 1;
     if (!buren(ia, ib)) return arr;
-    const [item] = arr.splice(ib, 1);
-    ia = arr.indexOf(a);
-    const insert = (ia + 2) % arr.length;
-    arr.splice(insert, 0, item);
-    return arr;
+    const kopie = arr.slice();
+    const [item] = kopie.splice(ib, 1);
+    ia = kopie.indexOf(a);
+    const insert = (ia + 2) % kopie.length;
+    kopie.splice(insert, 0, item);
+    return kopie;
   }
-  opties = scheidBuren(optes = opties, "Goud", "Zilver"); // kleine truc, behoud referentie
+  opties = scheidBuren(opties, "Goud", "Zilver");
 
-  const donkereSegmenten = new Set([]); // segmenttekst blijft donker
-  const lijnenWitKleuren = new Set([]); // monsterlijnen zwart
-  const pupilKleuren = new Set([]);     // pupillen uit
+  const donkereSegmenten = new Set([]);   // segmenttekst donker
+  const lijnenWitKleuren = new Set([]);   // monsterlijnen zwart
+  const pupilKleuren = new Set([]);       // pupillen uit
 
-  // spinner
+  // ---------- spinner ----------
   const rad = document.getElementById("rad");
   const rctx = rad.getContext("2d");
   const CX = 220, CY = 200, R = 190;
   let hoek = 0, bezig = false;
 
-  // maak endhoek altijd groter of gelijk
   function normBoog(a0, a1) {
     const tau = Math.PI * 2;
     let s = a0, e = a1;
@@ -154,7 +180,7 @@
     return [s, e];
   }
 
-  // metallic gloed in segment, licht staat vast in het scherm
+  // metallic gloed in segment
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
     const [s, e] = normBoog(a0, a1);
@@ -166,7 +192,6 @@
     rctx.closePath();
     rctx.clip();
 
-    // sterkere overlay dan voorheen
     const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === "Goud") {
       overlayGrad.addColorStop(0.00, "rgba(255,250,210,0.90)");
@@ -310,7 +335,7 @@
     tekenPijl();
   }
 
-  // monster
+  // ---------- monster ----------
   const mCanvas = document.getElementById("monster");
   const m = mCanvas.getContext("2d");
   const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
@@ -383,9 +408,8 @@
     m.restore();
   }
 
-  // veel sterkere glans voor goud en zilver
+  // sterkere glans voor goud en zilver
   function voegMetaalGlansToeMonster(type, x, y, w, h) {
-    // diepe toon plus sterke highlights
     const overlay = document.createElement("canvas");
     overlay.width = w; overlay.height = h;
     const o = overlay.getContext("2d");
@@ -421,7 +445,7 @@
     }
     m.restore();
 
-    // specular highlights, twee lagen
+    // specular highlights
     const spec = document.createElement("canvas");
     spec.width = w; spec.height = h;
     const s = spec.getContext("2d");
@@ -466,7 +490,7 @@
     ctx.quadraticCurveTo(x, y, x + r, y);
   }
 
-  // ---------- Gewogen keuze 80/20 en gericht spinnen ----------
+  // ---------- gewogen keuze 80,20 en gericht spinnen ----------
   function pickGewogen() {
     const r = Math.random();
     const pool = r < 0.8 ? preferredSet : limitedSet;
@@ -478,6 +502,10 @@
 
   function draai() {
     if (bezig) return;
+
+    // iPad TTS primen op de daadwerkelijke gebruikersactie
+    if (isAppleMobile) primeTTS();
+
     bezig = true;
     document.getElementById("draaiBtn").disabled = true;
 
@@ -494,7 +522,7 @@
     let hoekTargetBase = (-aDesired) % 360;
     if (hoekTargetBase < 0) hoekTargetBase += 360;
 
-    const rondes = 4 + Math.floor(Math.random() * 2); // 4 of 5 rondes
+    const rondes = 4 + Math.floor(Math.random() * 2); // 4 of 5
     const current = hoek;
     const currentMod = ((current % 360) + 360) % 360;
     const absoluteTarget = current + ((hoekTargetBase - currentMod + 360) % 360) + 360 * rondes;
