@@ -7,7 +7,7 @@
   <style>
     :root { --bg:#f6f7fb; --fg:#111; --panel:#fff; --rand:#111; --soft:#e8f4f5; }
     * { box-sizing: border-box; }
-    html, body { height: 100%; }
+    html, body { height: 100%; -webkit-text-size-adjust: 100%; }
     body {
       margin: 0; padding: 12px;
       font-family: system-ui, Arial, sans-serif;
@@ -17,8 +17,8 @@
       gap: 16px;
       align-items: start;
     }
-    /* Eén kolom op small screens, zoals iPad staand */
-    @media (max-width: 1080px) {
+    /* Op iPad liggend blijft het twee kolommen, pas vanaf smallere schermen één kolom */
+    @media (max-width: 900px) {
       body { grid-template-columns: 1fr; }
     }
 
@@ -36,12 +36,13 @@
       padding: 8px;
     }
 
-    /* Canvas containers met responsive maat, canvassen schalen intern mee met DPR */
+    /* responsive canvas containers */
     .canvas-wrap { width: 100%; }
-    #rad      { display:block; width:100%; height:auto; }
-    #monster  { display:block; width:100%; height:auto; }
+    /* houd het rad altijd netjes rond, verhouding 5:4 zoals jouw ontwerp */
+    #rad     { display:block; width:100%; aspect-ratio: 5 / 4; }
+    #monster { display:block; width:100%; aspect-ratio: 5 / 6; }
 
-    /* Resultaatvlak onder het rad, zoals jouw voorbeeld */
+    /* resultaat vlak onder het rad */
     .resultaat-rij {
       display: grid;
       grid-template-columns: 110px 1fr;
@@ -53,11 +54,8 @@
       padding: 10px;
       margin-top: 10px;
     }
-    @media (max-width: 480px) {
-      .resultaat-rij { grid-template-columns: 90px 1fr; }
-    }
 
-    /* Mondknop als jouw afbeelding, rond met zwarte rand, transparant buiten de knop */
+    /* jouw mondknop als afbeelding in ronde knop met zwarte rand */
     .spreekknop {
       width: 100px; height: 100px;
       border-radius: 50%;
@@ -80,20 +78,18 @@
 </head>
 <body>
 
-  <!-- Linkerzijde: Spinner en resultaat -->
+  <!-- Linkerzijde -->
   <div class="paneel">
     <div class="bordtitel">Spinner</div>
     <div class="canvas-wrap">
-      <!-- vaste ontwerpmaat 500×400, we schalen met DPR en CSS -->
-      <canvas id="rad" width="500" height="400" aria-label="kleurenspin" title="Tik op het rad om te draaien"></canvas>
+      <!-- we laten width en height door JS zetten op basis van CSS maat en DPR -->
+      <canvas id="rad" aria-label="kleurenspin" title="Tik op het rad om te draaien"></canvas>
     </div>
 
     <div class="resultaat-rij">
-      <!-- Gebruik jouw mondknop als PNG met transparante achtergrond -->
       <button id="spreekBtn" class="spreekknop" aria-label="Spreek kleur">
         <img src="mondknop.png" alt="" />
       </button>
-
       <div>
         <div id="resultaat">Gekozen kleur: —</div>
         <div class="sub">
@@ -107,29 +103,37 @@
     </div>
   </div>
 
-  <!-- Rechterzijde: Kleurenmonster -->
+  <!-- Rechterzijde -->
   <div class="paneel">
     <div class="bordtitel">Kleurenmonster</div>
     <div class="kader">
-      <!-- vaste ontwerpmaat 500×600, we schalen met DPR en CSS -->
-      <canvas id="monster" width="500" height="600" aria-label="kleurenmonster"></canvas>
+      <canvas id="monster" aria-label="kleurenmonster"></canvas>
     </div>
   </div>
 
 <script>
-/* ---------- device pixel ratio scaling voor scherpe canvassen ---------- */
-function fitCanvasToCss(canvas) {
+/* ---------------- hulpmiddelen ---------------- */
+function sizeCanvasToCss(canvas) {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const rect = canvas.getBoundingClientRect();
   const w = Math.max(1, Math.round(rect.width * dpr));
   const h = Math.max(1, Math.round(rect.height * dpr));
   if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = w; canvas.height = h;
   }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // werk in CSS pixels
+  return { ctx, cssW: rect.width, cssH: rect.height };
+}
+function supportMode(ctx, mode) {
+  const prev = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = mode;
+  const ok = (ctx.globalCompositeOperation === mode);
+  ctx.globalCompositeOperation = prev;
+  return ok;
 }
 
-/* ---------- spraak en iPad fixes ---------- */
+/* ---------------- spraak en iPad fixes ---------------- */
 let nlVoice = null;
 const isAppleMobile =
   /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -218,7 +222,7 @@ if ('speechSynthesis' in window) {
   }, { once: true });
 }
 
-/* ---------- kleuren, 80 20 weging ---------- */
+/* ---------------- kleuren, 80 20 weging ---------------- */
 const preferredSet = [
   { label: 'Bruin',     hex: '#8B4513' },
   { label: 'Zilver',    hex: '#C0C0C0' },
@@ -255,38 +259,34 @@ function scheidBuren(arr, a, b) {
 }
 optes = opties; opties = scheidBuren(optes, 'Goud', 'Zilver');
 
-/* ---------- spinner tekenen met schaalfactor ---------- */
+/* ---------------- spinner, nu volledig responsief op maat canvas ---------------- */
 const rad = document.getElementById('rad');
 const rctx = rad.getContext('2d');
 let hoek = 0, bezig = false, laatsteKleur = '';
 
 function renderRad() {
-  fitCanvasToCss(rad);
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const { ctx, cssW, cssH } = sizeCanvasToCss(rad);
 
-  // ontwerp basis 500×400, we schalen het tekenvlak
-  const baseW = 500, baseH = 400;
-  const scaleX = (rad.width  / dpr) / baseW;
-  const scaleY = (rad.height / dpr) / baseH;
-  const k = Math.min(scaleX, scaleY);
+  // bepaal centrum en straal op basis van actuele maat
+  const minSide = Math.min(cssW, cssH);
+  const R = minSide * 0.45;
+  const CX = cssW * 0.44;
+  const CY = cssH * 0.50;
 
-  rctx.save();
-  rctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
-  rctx.clearRect(0, 0, baseW, baseH);
+  ctx.clearRect(0, 0, cssW, cssH);
 
-  const CX = 220, CY = 200, R = 190;
   const stap = 2 * Math.PI / opties.length;
   const rot = hoek * Math.PI / 180;
 
-  function normBoog(a0, a1) { const tau = Math.PI*2; let s=a0,e=a1; while(e<s) e+=tau; return [s,e]; }
+  function normBoog(a0, a1){ const tau = Math.PI*2; let s=a0,e=a1; while(e<s) e+=tau; return [s,e]; }
 
   function tekenMetallicInSegment(naam, a0, a1) {
     if (!metallicKleuren.has(naam)) return;
     const [s, e] = normBoog(a0, a1);
-    rctx.save();
-    rctx.beginPath(); rctx.moveTo(CX, CY); rctx.arc(CX, CY, R, s, e, false); rctx.closePath(); rctx.clip();
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.arc(CX, CY, R, s, e, false); ctx.closePath(); ctx.clip();
 
-    const overlayGrad = rctx.createLinearGradient(CX, CY - R, CX, CY + R);
+    const overlayGrad = ctx.createLinearGradient(CX, CY - R, CX, CY + R);
     if (naam === 'Goud') {
       overlayGrad.addColorStop(0.00,'rgba(255,250,210,0.90)');
       overlayGrad.addColorStop(0.30,'rgba(255,255,255,0.28)');
@@ -297,44 +297,58 @@ function renderRad() {
       overlayGrad.addColorStop(0.50,'rgba(0,0,0,0.42)');
       overlayGrad.addColorStop(1.00,'rgba(235,235,235,0.42)');
     }
-    rctx.globalCompositeOperation='overlay'; rctx.fillStyle=overlayGrad;
-    rctx.fillRect(CX-R, CY-R, R*2, R*2);
-    rctx.globalCompositeOperation='source-over';
-
-    rctx.restore();
+    if (supportMode(ctx,'overlay')) {
+      ctx.globalCompositeOperation='overlay';
+      ctx.fillStyle=overlayGrad; ctx.fillRect(CX-R, CY-R, R*2, R*2);
+      ctx.globalCompositeOperation='source-over';
+    } else {
+      ctx.globalCompositeOperation='multiply';
+      ctx.fillStyle=overlayGrad; ctx.fillRect(CX-R, CY-R, R*2, R*2);
+      ctx.globalCompositeOperation='lighter';
+      ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.fillRect(CX-R, CY-R, R*2, R*2);
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.restore();
   }
 
-  // schijven
-  for (let i=0;i<optes.length;i++){} // defensieve no-op
-
+  // segmenten
   for (let i = 0; i < opties.length; i++) {
     const naam = opties[i];
     const [s, e] = normBoog(i * stap + rot, (i + 1) * stap + rot);
-    rctx.beginPath(); rctx.moveTo(CX, CY); rctx.arc(CX, CY, R, s, e, false); rctx.closePath();
-    rctx.fillStyle = kleurMap[naam] || '#000'; rctx.fill();
-
+    ctx.beginPath(); ctx.moveTo(CX, CY); ctx.arc(CX, CY, R, s, e, false); ctx.closePath();
+    ctx.fillStyle = kleurMap[naam] || '#000'; ctx.fill();
     tekenMetallicInSegment(naam, s, e);
-
-    rctx.strokeStyle = '#222'; rctx.lineWidth = 2; rctx.stroke();
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.stroke();
 
     const mid = s + (e - s) / 2;
-    rctx.save(); rctx.translate(CX, CY); rctx.rotate(mid);
-    rctx.textAlign = 'right'; rctx.fillStyle = '#000';
-    rctx.font = '16px system-ui, Arial'; rctx.fillText(naam, R - 12, 6);
-    rctx.restore();
+    ctx.save(); ctx.translate(CX, CY); ctx.rotate(mid);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#000';
+    ctx.font = `${Math.max(12, R*0.08)}px system-ui, Arial`;
+    ctx.fillText(naam, R - 10, 5);
+    ctx.restore();
   }
 
   // rand
-  rctx.lineWidth = 6; rctx.strokeStyle = '#333';
-  rctx.beginPath(); rctx.arc(CX, CY, R + 3, 0, Math.PI * 2); rctx.stroke();
+  ctx.lineWidth = 6; ctx.strokeStyle = '#333';
+  ctx.beginPath(); ctx.arc(CX, CY, R + 3, 0, Math.PI * 2); ctx.stroke();
 
   // pijl rechts
-  const offset = 22; const tipX = CX + R + offset; const tipY = CY; const baseX = tipX + 34; const halfH = 22;
-  rctx.beginPath(); rctx.moveTo(tipX, tipY); rctx.lineTo(baseX, tipY - halfH); rctx.lineTo(baseX, tipY + halfH);
-  rctx.closePath(); rctx.fillStyle = '#222'; rctx.fill();
-  rctx.beginPath(); rctx.arc(CX, CY, 6, 0, Math.PI*2); rctx.fill();
+  const offset = R * 0.12;
+  const tipX = CX + R + offset;
+  const tipY = CY;
+  const baseX = tipX + offset * 1.8;
+  const halfH = offset * 1.2;
+  ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(baseX, tipY - halfH); ctx.lineTo(baseX, tipY + halfH);
+  ctx.closePath(); ctx.fillStyle = '#222'; ctx.fill();
 
-  rctx.restore();
+  // middelpunt
+  ctx.beginPath(); ctx.arc(CX, CY, Math.max(4, R*0.03), 0, Math.PI*2); ctx.fill();
+}
+
+function indexOnderPijl() {
+  const n = opties.length, stap = 360 / n;
+  let a = (-hoek) % 360; if (a < 0) a += 360;
+  return Math.floor(a / stap) % n;
 }
 
 function pickGewogen(){
@@ -379,15 +393,15 @@ function draai() {
   }
   requestAnimationFrame(frame);
 }
+
 function toonResultaat(tekst){
   document.getElementById('resultaat').textContent = `Gekozen kleur: ${tekst}`;
   document.getElementById('live').textContent = `Kleur ${tekst}`;
 }
 
-/* klik op het rad om te draaien */
 rad.addEventListener('click', draai);
 
-/* ---------- monster, exact als eerder, met DPR scaling ---------- */
+/* ---------------- monster, ook responsief ---------------- */
 const mCanvas = document.getElementById('monster');
 const m = mCanvas.getContext('2d');
 const imgMask  = new Image();  imgMask.src  = "monster-mask.png";
@@ -401,54 +415,45 @@ Promise.all([
   new Promise(res => imgPupil.onload = res)
 ]).then(() => { assetsGereed = true; tekenMonsterKader(); kleurMonster('#FFFFFF', false, false, null); });
 
-function renderMonsterBackdrop() {
-  fitCanvasToCss(mCanvas);
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  m.setTransform(dpr,0,0,dpr,0,0);
-}
-
 function tekenMonsterKader() {
-  renderMonsterBackdrop();
-  m.clearRect(0, 0, mCanvas.width, mCanvas.height);
-  m.save(); m.lineWidth = 6; m.strokeStyle = "#222"; m.fillStyle = "#fff";
-  m.beginPath(); rondeRechthoek(m, 12, 12, mCanvas.clientWidth - 24, mCanvas.clientHeight - 24, 18); m.fill(); m.stroke(); m.restore();
+  const { ctx, cssW, cssH } = sizeCanvasToCss(mCanvas);
+  ctx.clearRect(0, 0, cssW, cssH);
+  ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = "#222"; ctx.fillStyle = "#fff";
+  ctx.beginPath(); rondeRechthoek(ctx, 12, 12, cssW - 24, cssH - 24, 18); ctx.fill(); ctx.stroke(); ctx.restore();
 }
 function kleurMonster(vulkleur, lijnenWit, toonPupillen, metallicType) {
   if (!assetsGereed) return;
-  renderMonsterBackdrop();
+  const { ctx, cssW, cssH } = sizeCanvasToCss(mCanvas);
   tekenMonsterKader();
 
   const pad = 24;
-  const doelW = mCanvas.clientWidth - pad * 2;
-  const doelH = mCanvas.clientHeight - pad * 2;
-
-  // op basis van originele assetmaat, schaal proportioneel
+  const doelW = cssW - pad * 2;
+  const doelH = cssH - pad * 2;
   const ratio = Math.min(doelW / imgMask.width, doelH / imgMask.height);
   const w = Math.max(1, Math.round(imgMask.width * ratio));
   const h = Math.max(1, Math.round(imgMask.height * ratio));
-  const x = Math.round((mCanvas.clientWidth - w) / 2);
-  const y = Math.round((mCanvas.clientHeight - h) / 2);
+  const x = Math.round((cssW - w) / 2);
+  const y = Math.round((cssH - h) / 2);
 
-  m.save();
-  m.fillStyle = vulkleur; m.fillRect(x, y, w, h);
-  m.globalCompositeOperation = "destination-in"; m.imageSmoothingEnabled = true; m.drawImage(imgMask, x, y, w, h);
-  m.globalCompositeOperation = "source-over";
+  ctx.save();
+  ctx.fillStyle = vulkleur; ctx.fillRect(x, y, w, h);
+  ctx.globalCompositeOperation = "destination-in"; ctx.imageSmoothingEnabled = true; ctx.drawImage(imgMask, x, y, w, h);
+  ctx.globalCompositeOperation = "source-over";
 
-  if (!lijnenWit) m.drawImage(imgLine, x, y, w, h);
+  if (!lijnenWit) { ctx.drawImage(imgLine, x, y, w, h); }
   else {
     const off = document.createElement("canvas"); off.width = w; off.height = h; const o = off.getContext("2d");
     o.fillStyle = "#ffffff"; o.fillRect(0, 0, off.width, off.height);
     o.globalCompositeOperation = "destination-in"; o.drawImage(imgLine, 0, 0, off.width, off.height);
-    o.globalCompositeOperation = "source-over"; m.drawImage(off, x, y);
+    o.globalCompositeOperation = "source-over"; ctx.drawImage(off, x, y);
   }
-  if (toonPupillen) m.drawImage(imgPupil, x, y, w, h);
+  if (toonPupillen) ctx.drawImage(imgPupil, x, y, w, h);
 
-  // extra glans voor goud en zilver
-  if (metallicType) voegMetaalGlansToeMonster(metallicType, x, y, w, h);
+  if (metallicType) voegMetaalGlansToeMonster(ctx, metallicType, x, y, w, h);
 
-  m.restore();
+  ctx.restore();
 }
-function voegMetaalGlansToeMonster(type, x, y, w, h) {
+function voegMetaalGlansToeMonster(ctx, type, x, y, w, h) {
   const overlay = document.createElement('canvas'); overlay.width = w; overlay.height = h; const o = overlay.getContext('2d');
   const lg = o.createLinearGradient(0, 0, 0, h);
   if (type === 'Goud') {
@@ -464,7 +469,10 @@ function voegMetaalGlansToeMonster(type, x, y, w, h) {
   o.fillStyle = lg; o.fillRect(0,0,w,h);
   o.globalCompositeOperation = 'destination-in'; o.drawImage(imgMask, 0, 0, w, h);
 
-  m.save(); m.globalCompositeOperation='overlay'; m.drawImage(overlay,x,y); m.globalCompositeOperation='screen'; m.drawImage(overlay,x,y); m.globalCompositeOperation='source-over'; m.restore();
+  ctx.save();
+  if (supportMode(ctx,'overlay')) { ctx.globalCompositeOperation='overlay'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='screen'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='source-over'; }
+  else { ctx.globalCompositeOperation='multiply'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='lighter'; ctx.drawImage(overlay,x,y); ctx.globalCompositeOperation='source-over'; }
+  ctx.restore();
 
   const spec = document.createElement('canvas'); spec.width = w; spec.height = h; const s = spec.getContext('2d');
   const rMax = Math.max(w,h);
@@ -476,7 +484,7 @@ function voegMetaalGlansToeMonster(type, x, y, w, h) {
   s.fillStyle = rg2; s.fillRect(0,0,w,h);
   s.globalCompositeOperation = 'destination-in'; s.drawImage(imgMask, 0, 0, w, h);
 
-  m.save(); m.globalCompositeOperation='screen'; m.drawImage(spec,x,y); m.globalCompositeOperation='source-over'; m.restore();
+  ctx.save(); if (supportMode(ctx,'screen')) { ctx.globalCompositeOperation='screen'; ctx.drawImage(spec,x,y); ctx.globalCompositeOperation='source-over'; } else { ctx.globalAlpha=.9; ctx.drawImage(spec,x,y); ctx.globalAlpha=1; } ctx.restore();
 }
 function rondeRechthoek(ctx, x, y, w, h, r) {
   ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -485,25 +493,27 @@ function rondeRechthoek(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
 }
 
-/* ---------- mondknop actie ---------- */
+/* mondknop actie */
 document.getElementById('spreekBtn').addEventListener('click', ()=>{
   if (isAppleMobile) { unlockAudio(); primeTTS(); }
   spreekKleur(laatsteKleur || 'Geen kleur gekozen');
 });
 
-/* ---------- resize, houdt alles passend ---------- */
-function resizeAll() {
+/* klik op rad om te draaien */
+document.getElementById('rad').addEventListener('click', draai);
+
+/* luister naar grootte en oriëntatie */
+function redrawAll() {
   renderRad();
   tekenMonsterKader();
-  // kleur opnieuw tekenen in huidige kleur, behoudt state
   if (laatsteKleur) {
     kleurMonster(kleurMap[laatsteKleur], false, false, metallicKleuren.has(laatsteKleur) ? laatsteKleur : null);
   } else {
     kleurMonster('#FFFFFF', false, false, null);
   }
 }
-window.addEventListener('resize', resizeAll);
-window.addEventListener('orientationchange', () => setTimeout(resizeAll, 50));
+window.addEventListener('resize', redrawAll);
+window.addEventListener('orientationchange', () => setTimeout(redrawAll, 50));
 
 /* init */
 renderRad();
