@@ -63,12 +63,15 @@
     return ok;
   }
 
-  // ---------- spraak met NL stem en iPad fixes ----------
+  // ---------- spraak met NL stem en iPad harde fix ----------
   let nlVoice = null;
 
   const isAppleMobile =
     /iPad|iPhone|iPod/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  // Als dit true is, spreekt iPad meteen bij de klik de kleur uit
+  const spreekDirectOpIPad = true;
 
   let audioCtx = null;
   let ttsPrimed = false;
@@ -90,7 +93,7 @@
     } catch {}
   }
 
-  function waitForVoices(timeoutMs = 1200) {
+  function waitForVoices(timeoutMs = 1500) {
     return new Promise(resolve => {
       const start = performance.now();
       const check = () => {
@@ -144,7 +147,7 @@
       unlockAudio();
       const u = new SpeechSynthesisUtterance(' ');
       u.lang = nlVoice?.lang || 'nl-NL';
-      u.volume = 0.01;
+      u.volume = 0.01; // fluister
       u.rate = 1;
       u.pitch = 1;
       speechSynthesis.speak(u);
@@ -216,11 +219,11 @@
   const kleurMap = Object.fromEntries([...preferredSet, ...limitedSet].map(o => [o.label, o.hex]));
   const metallicKleuren = new Set(['Goud', 'Zilver']);
 
-  // goud en zilver liever geen buren op het rad
+  // goud en zilver liever geen buren
   function scheidBuren(arr, a, b) {
     const n = arr.length;
     let ia = arr.indexOf(a), ib = arr.indexOf(b);
-    if (ia < 0 || ib < 0) return arr;
+    if (ia < 0 || ib < 0) return arr.slice();
     const buren = (x, y) => Math.abs(x - y) === 1 || Math.abs(x - y) === n - 1;
     if (!buren(ia, ib)) return arr.slice();
     const kopie = arr.slice();
@@ -230,7 +233,7 @@
     kopie.splice(insert, 0, item);
     return kopie;
   }
-  opties = scheidBuren(optes = opties, 'Goud', 'Zilver'); // behoud referentie via optes-truc
+  opties = scheidBuren(opties, 'Goud', 'Zilver');
 
   const donkereSegmenten = new Set([]);   // segmenttekst donker
   const lijnenWitKleuren = new Set([]);   // monsterlijnen zwart
@@ -380,7 +383,7 @@
   // pijl buiten het rad, rechts, wijst naar links
   function tekenPijl() {
     const offset = 22;
-    const tipX = CX + R + offset;
+       const tipX = CX + R + offset;
     const tipY = CY;
     const baseX = tipX + 34;
     const halfH = 22;
@@ -502,7 +505,7 @@
     if (supportMode(m, 'overlay')) {
       m.globalCompositeOperation = 'overlay';
       m.drawImage(overlay, x, y);
-      m.globalCompositeOperation = 'screen'; // extra punch
+      m.globalCompositeOperation = 'screen';
       m.drawImage(overlay, x, y);
       m.globalCompositeOperation = 'source-over';
     } else {
@@ -514,7 +517,6 @@
     }
     m.restore();
 
-    // specular highlights
     const spec = document.createElement('canvas');
     spec.width = w; spec.height = h;
     const s = spec.getContext('2d');
@@ -559,7 +561,7 @@
     ctx.quadraticCurveTo(x, y, x + r, y);
   }
 
-  // ---------- gewogen keuze 80,20 en gericht spinnen ----------
+  // ---------- gewogen keuze 80,20 en spin ----------
   function pickGewogen() {
     const r = Math.random();
     const pool = r < 0.8 ? preferredSet : limitedSet;
@@ -572,34 +574,36 @@
   function draai() {
     if (bezig) return;
 
-    // iPad, audio en TTS direct unlocken op user gesture
+    // iPad, audio en TTS direct unlocken en zo nodig direct spreken
     if (isAppleMobile) {
       unlockAudio();
       primeTTS();
     }
 
+    // kies doelkleur volgens 80,20 verdeling
+    const doelNaam = pickGewogen();
+
+    // iPad spreekt meteen bij start zodat het gegarandeerd hoorbaar is
+    if (isAppleMobile && spreekDirectOpIPad) {
+      spreekKleur(doelNaam);
+    }
+
     bezig = true;
     document.getElementById('draaiBtn').disabled = true;
 
-    // kies doelkleur volgens 80,20 verdeling
-    const doelNaam = pickGewogen();
     const doelIndex = opties.indexOf(doelNaam);
     const n = opties.length;
     const stapDeg = 360 / n;
 
-    // midden van segment onder pijl
     const aDesired = doelIndex * stapDeg + stapDeg / 2;
-
-    // eindhoek zodat pijl op aDesired wijst
     let hoekTargetBase = (-aDesired) % 360;
     if (hoekTargetBase < 0) hoekTargetBase += 360;
 
-    const rondes = 4 + Math.floor(Math.random() * 2); // 4 of 5
+    const rondes = 4 + Math.floor(Math.random() * 2);
     const current = hoek;
     const currentMod = ((current % 360) + 360) % 360;
     const absoluteTarget = current + ((hoekTargetBase - currentMod + 360) % 360) + 360 * rondes;
 
-    // easing animatie
     const duur = 1800 + Math.random() * 600;
     const start = performance.now();
     const startHoek = hoek;
@@ -616,7 +620,6 @@
         hoek = absoluteTarget % 360;
         renderRad();
 
-        // resultaat, monster en spraak
         const gekozen = doelNaam;
         const lijnenWit = lijnenWitKleuren.has(gekozen);
         const toonPupillen = pupilKleuren.has(gekozen);
@@ -624,7 +627,11 @@
 
         toonResultaat(gekozen);
         kleurMonster(kleurMap[gekozen], lijnenWit, toonPupillen, metallicType);
-        spreekKleur(gekozen);
+
+        // op pc en niet-iOS pas na het landen spreken
+        if (!isAppleMobile || !spreekDirectOpIPad) {
+          spreekKleur(gekozen);
+        }
 
         bezig = false;
         document.getElementById('draaiBtn').disabled = false;
